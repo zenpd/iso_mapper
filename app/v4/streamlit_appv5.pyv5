@@ -1,0 +1,594 @@
+"""
+ISO 20022 Migration Platform - Final Version
+Uses native Streamlit components for reliable rendering
+MT101 -> pain.001 | MT103 -> pacs.008
+"""
+
+import streamlit as st
+import requests
+import json
+import re
+from typing import Dict, Any
+
+st.set_page_config(
+    page_title="ISO 20022 Migration",
+    page_icon="🔄",
+    layout="wide"
+)
+
+API_URL = "http://localhost:8000"
+
+# Samples
+SAMPLES = {
+    "MT103 - USD Transfer": """:20:TRX2024112001
+:23B:CRED
+:32A:241118USD50000,00
+:50K:/123456789
+ACME CORPORATION
+123 BUSINESS STREET
+NEW YORK, NY 10001
+:52A:CHASUS33XXX
+:59:/987654321
+GLOBAL TRADING LTD
+456 COMMERCE AVENUE
+LONDON, EC2R 8AH
+:70:INVOICE INV-2024-1234
+:71A:SHA""",
+    "MT101 - Payment Request": """:20:PAYREQ001
+:28D:1/1
+:30:241120
+:25:/123456789
+:50H:/DE89370400440532013000
+ORDERING COMPANY GMBH
+FRANKFURT, GERMANY
+:52A:DEUTDEFFXXX
+:21:TXN001
+:32B:EUR10000,00
+:57A:ABORABAB
+:59:/AE070331234567890123456
+BENEFICIARY LLC
+DUBAI
+:70:SALARY NOV 2024
+:71A:SHA"""
+}
+
+
+def detect_format(text: str) -> str:
+    """Detect format: json, xml, or text"""
+    text = text.strip()
+    if text.startswith('{'):
+        try:
+            json.loads(text)
+            return 'json'
+        except:
+            pass
+    if text.startswith('<'):
+        return 'xml'
+    return 'text'
+
+
+def detect_mt_type(text: str, fmt: str) -> str:
+    """Detect MT101 or MT103"""
+    
+    if fmt == 'json':
+        try:
+            data = json.loads(text)
+            
+            # Check top-level keys first
+            if 'MT101' in data:
+                return 'MT101'
+            if 'MT103' in data:
+                return 'MT103'
+            
+            # Check Block2 MessageType
+            mt = data.get('MT103', data.get('MT101', data))
+            b2 = mt.get('Block2', {})
+            msg_type = str(b2.get('MessageType', ''))
+            if msg_type == '101':
+                return 'MT101'
+            elif msg_type == '103':
+                return 'MT103'
+            
+            # Check Block4 fields
+            b4 = mt.get('Block4', {})
+            if any(k in b4 for k in ['Field28D', 'Field50H', 'Field30']):
+                return 'MT101'
+            if any(k in b4 for k in ['Field23B', 'Field32A', 'Field50K', 'Field50F']):
+                return 'MT103'
+                
+        except:
+            pass
+        return 'MT103'
+    
+    elif fmt == 'xml':
+        text_lower = text.lower()
+        if 'mt101' in text_lower or '>101<' in text_lower:
+            return 'MT101'
+        return 'MT103'
+    
+    else:  # Plain text
+        if ':28D:' in text or ':50H:' in text or (':30:' in text and ':32B:' in text):
+            return 'MT101'
+        if ':23B:' in text or ':32A:' in text:
+            return 'MT103'
+        return 'MT103'
+
+
+def get_mx_type(mt_type: str) -> str:
+    """Get MX type for MT type"""
+    if mt_type == 'MT101':
+        return 'pain.001'
+    else:
+        return 'pacs.008'
+
+
+def parse_json(text: str) -> Dict[str, Any]:
+    """Parse JSON MT message"""
+    result = {}
+    
+    try:
+        data = json.loads(text)
+        
+        # Find MT object
+        mt = data.get('MT103', data.get('MT101', data))
+        b4 = mt.get('Block4', {})
+        
+        # Reference
+        result['ref'] = b4.get('Field20', '')
+        
+        # Amount - Field32A or Field32B
+        f32a = b4.get('Field32A', {})
+        f32b = b4.get('Field32B', {})
+        
+        if isinstance(f32a, dict) and f32a:
+            result['date'] = str(f32a.get('Date', ''))
+            result['ccy'] = str(f32a.get('Currency', ''))
+            result['amt'] = str(f32a.get('Amount', '')).replace(',', '.')
+        elif isinstance(f32b, dict) and f32b:
+            result['ccy'] = str(f32b.get('Currency', ''))
+            result['amt'] = str(f32b.get('Amount', '')).replace(',', '.')
+        
+        # Date for MT101
+        if 'Field30' in b4 and not result.get('date'):
+            result['date'] = str(b4.get('Field30', ''))
+        
+        # Sender
+        sender = None
+        for fname in ['Field50F', 'Field50K', 'Field50H']:
+            if fname in b4:
+                sender = b4[fname]
+                break
+        
+        if sender and isinstance(sender, dict):
+            result['s_acct'] = sender.get('Account', '')
+            
+            na = sender.get('NameAndAddress', {})
+            if isinstance(na, dict):
+                # Line1: "1/NAME"
+                line1 = na.get('Line1', '')
+                if '/' in line1 and len(line1) > 0 and line1[0].isdigit():
+                    result['s_name'] = line1.split('/', 1)[-1].strip()
+                else:
+                    result['s_name'] = line1.strip()
+                
+                # Address
+                addr_parts = []
+                for lkey in ['Line2', 'Line3']:
+                    line = na.get(lkey, '')
+                    if line:
+                        if '/' in line and len(line) > 0 and line[0].isdigit():
+                            addr_parts.append(line.split('/', 1)[-1].strip())
+                        else:
+                            addr_parts.append(line.strip())
+                result['s_addr'] = ', '.join(addr_parts)
+                
+                # Country from Line4: "3/CC/CITY"
+                line4 = na.get('Line4', '')
+                if line4:
+                    parts = line4.split('/')
+                    if len(parts) >= 2:
+                        result['s_ctry'] = parts[1].strip()
+        
+        # Sender BIC
+        f52 = b4.get('Field52A', {})
+        if isinstance(f52, dict):
+            result['s_bic'] = f52.get('IdentifierCode', f52.get('PartyIdentifier', ''))
+        elif isinstance(f52, str):
+            result['s_bic'] = f52
+        
+        # Receiver
+        receiver = None
+        for fname in ['Field59F', 'Field59', 'Field59A']:
+            if fname in b4:
+                receiver = b4[fname]
+                break
+        
+        if receiver and isinstance(receiver, dict):
+            result['r_acct'] = receiver.get('Account', '')
+            
+            na = receiver.get('NameAndAddress', {})
+            if isinstance(na, dict):
+                line1 = na.get('Line1', '')
+                if '/' in line1 and len(line1) > 0 and line1[0].isdigit():
+                    result['r_name'] = line1.split('/', 1)[-1].strip()
+                else:
+                    result['r_name'] = line1.strip()
+                
+                addr_parts = []
+                for lkey in ['Line2', 'Line3']:
+                    line = na.get(lkey, '')
+                    if line:
+                        if '/' in line and len(line) > 0 and line[0].isdigit():
+                            addr_parts.append(line.split('/', 1)[-1].strip())
+                        else:
+                            addr_parts.append(line.strip())
+                result['r_addr'] = ', '.join(addr_parts)
+                
+                line4 = na.get('Line4', '')
+                if line4:
+                    parts = line4.split('/')
+                    if len(parts) >= 2:
+                        result['r_ctry'] = parts[1].strip()
+        
+        # Remittance & Charges
+        result['remit'] = b4.get('Field70', '')
+        result['charges'] = b4.get('Field71A', '')
+        
+    except Exception as e:
+        st.error(f"JSON Error: {e}")
+    
+    return result
+
+
+def parse_text(text: str) -> Dict[str, Any]:
+    """Parse plain text MT message"""
+    result = {}
+    
+    # Reference
+    m = re.search(r':20:([^\n:]+)', text)
+    if m:
+        result['ref'] = m.group(1).strip()
+    
+    # Amount :32A:
+    m = re.search(r':32A:(\d{6})([A-Z]{3})([\d,\.]+)', text)
+    if m:
+        result['date'] = m.group(1)
+        result['ccy'] = m.group(2)
+        result['amt'] = m.group(3).replace(',', '.')
+    
+    # Amount :32B:
+    if not result.get('amt'):
+        m = re.search(r':32B:([A-Z]{3})([\d,\.]+)', text)
+        if m:
+            result['ccy'] = m.group(1)
+            result['amt'] = m.group(2).replace(',', '.')
+    
+    # Date :30:
+    if not result.get('date'):
+        m = re.search(r':30:(\d{6})', text)
+        if m:
+            result['date'] = m.group(1)
+    
+    # Sender
+    m = re.search(r':50[KFH]:(.*?)(?=:\d{2}[A-Z]?:|\Z)', text, re.DOTALL)
+    if m:
+        lines = [l.strip() for l in m.group(1).strip().split('\n') if l.strip()]
+        if lines:
+            if lines[0].startswith('/'):
+                result['s_acct'] = lines[0]
+                result['s_name'] = lines[1] if len(lines) > 1 else ''
+                result['s_addr'] = ', '.join(lines[2:]) if len(lines) > 2 else ''
+            else:
+                result['s_name'] = lines[0]
+                result['s_addr'] = ', '.join(lines[1:]) if len(lines) > 1 else ''
+            result['s_ctry'] = guess_country(' '.join(lines), result.get('ccy', ''))
+    
+    # Sender BIC
+    m = re.search(r':52A:([^\n:]+)', text)
+    if m:
+        result['s_bic'] = m.group(1).strip()
+    
+    # Receiver
+    m = re.search(r':59[AF]?:(.*?)(?=:\d{2}[A-Z]?:|\Z)', text, re.DOTALL)
+    if m:
+        lines = [l.strip() for l in m.group(1).strip().split('\n') if l.strip()]
+        if lines:
+            if lines[0].startswith('/'):
+                result['r_acct'] = lines[0]
+                result['r_name'] = lines[1] if len(lines) > 1 else ''
+                result['r_addr'] = ', '.join(lines[2:]) if len(lines) > 2 else ''
+            else:
+                result['r_name'] = lines[0]
+                result['r_addr'] = ', '.join(lines[1:]) if len(lines) > 1 else ''
+            result['r_ctry'] = guess_country(' '.join(lines), '')
+    
+    # Remittance
+    m = re.search(r':70:(.*?)(?=:\d{2}[A-Z]?:|\Z)', text, re.DOTALL)
+    if m:
+        result['remit'] = m.group(1).strip().replace('\n', ' ')
+    
+    # Charges
+    m = re.search(r':71A:([A-Z]{3})', text)
+    if m:
+        result['charges'] = m.group(1)
+    
+    return result
+
+
+def guess_country(text: str, ccy: str) -> str:
+    """Guess country"""
+    t = text.upper()
+    if any(x in t for x in ['USA', 'UNITED STATES', 'NEW YORK', 'NY ']):
+        return 'US'
+    if any(x in t for x in ['UK', 'LONDON', 'ENGLAND', 'MANCHESTER']):
+        return 'GB'
+    if any(x in t for x in ['GERMANY', 'FRANKFURT', 'GMBH']):
+        return 'DE'
+    if any(x in t for x in ['FRANCE', 'PARIS']):
+        return 'FR'
+    if any(x in t for x in ['UAE', 'DUBAI']):
+        return 'AE'
+    if 'SINGAPORE' in t:
+        return 'SG'
+    return {'USD': 'US', 'EUR': 'EU', 'GBP': 'GB', 'AED': 'AE'}.get(ccy, '')
+
+
+def get_flag(c: str) -> str:
+    """Get flag emoji"""
+    return {'US': '🇺🇸', 'GB': '🇬🇧', 'DE': '🇩🇪', 'FR': '🇫🇷', 'AE': '🇦🇪', 'SG': '🇸🇬', 'EU': '🇪🇺'}.get(c, '🌍')
+
+
+def format_amount(amt: str, ccy: str) -> str:
+    """Format amount"""
+    try:
+        v = float(amt) if amt else 0
+        s = {'USD': '$', 'EUR': '€', 'GBP': '£', 'AED': 'د.إ'}.get(ccy, f'{ccy} ')
+        return f"{s}{v:,.2f}"
+    except:
+        return f"{ccy} {amt}"
+
+
+def to_plain_mt(fields: Dict[str, Any], mt_type: str) -> str:
+    """Convert to plain MT for API"""
+    lines = [f":20:{fields.get('ref', 'REF001')}"]
+    
+    if mt_type == 'MT101':
+        lines.append(":28D:1/1")
+        lines.append(f":30:{fields.get('date', '241118')}")
+        lines.append(f":50H:{fields.get('s_acct', '')}")
+        if fields.get('s_name'):
+            lines.append(fields['s_name'])
+        if fields.get('s_bic'):
+            lines.append(f":52A:{fields['s_bic']}")
+        lines.append(":21:TXN001")
+        lines.append(f":32B:{fields.get('ccy', 'USD')}{fields.get('amt', '0').replace('.', ',')}")
+    else:
+        lines.append(":23B:CRED")
+        lines.append(f":32A:{fields.get('date', '241118')}{fields.get('ccy', 'USD')}{fields.get('amt', '0').replace('.', ',')}")
+        lines.append(f":50K:{fields.get('s_acct', '')}")
+        if fields.get('s_name'):
+            lines.append(fields['s_name'])
+        if fields.get('s_bic'):
+            lines.append(f":52A:{fields['s_bic']}")
+    
+    lines.append(f":59:{fields.get('r_acct', '')}")
+    if fields.get('r_name'):
+        lines.append(fields['r_name'])
+    if fields.get('remit'):
+        lines.append(f":70:{fields['remit']}")
+    lines.append(f":71A:{fields.get('charges', 'SHA')}")
+    
+    return '\n'.join(lines)
+
+
+def check_api():
+    """Check API"""
+    try:
+        return requests.get(f"{API_URL}/health", timeout=2).status_code == 200
+    except:
+        return False
+
+
+def call_api(mt: str, approach: str):
+    """Call transform API"""
+    try:
+        r = requests.post(f"{API_URL}/transform", json={"mt_message": mt, "approach": approach}, timeout=60)
+        return r.json() if r.status_code == 200 else {"error": f"API {r.status_code}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def main():
+    st.title("🔄 ISO 20022 Migration Platform")
+    st.caption("MT101 → pain.001 | MT103 → pacs.008")
+    
+    # Sidebar
+    with st.sidebar:
+        st.header("⚙️ Settings")
+        
+        api_ok = check_api()
+        if api_ok:
+            st.success("✅ API Connected")
+        else:
+            st.error("❌ API Offline")
+            st.code("uvicorn main:app --reload")
+        
+        st.divider()
+        
+        approach = st.radio(
+            "Approach",
+            ["hybrid", "rules", "llm"],
+            format_func=lambda x: {"hybrid": "⚡ Hybrid", "rules": "🔧 Rules", "llm": "🧠 LLM"}[x]
+        )
+        
+        st.divider()
+        
+        st.subheader("📋 Samples")
+        sample = st.selectbox("Select", list(SAMPLES.keys()), label_visibility="collapsed")
+        if st.button("📥 Load Sample", use_container_width=True):
+            st.session_state['input'] = SAMPLES[sample]
+            st.session_state['result'] = None
+            st.rerun()
+    
+    # Main content
+    col1, col2 = st.columns(2, gap="large")
+    
+    # INPUT
+    with col1:
+        st.subheader("📥 Input MT Message")
+        
+        # File upload
+        uploaded = st.file_uploader("Upload (.txt, .json, .xml)", type=['txt', 'json', 'xml'])
+        if uploaded:
+            st.session_state['input'] = uploaded.read().decode('utf-8')
+            st.success(f"✅ {uploaded.name}")
+        
+        # Text area
+        mt_input = st.text_area(
+            "Message",
+            value=st.session_state.get('input', SAMPLES["MT103 - USD Transfer"]),
+            height=180,
+            label_visibility="collapsed"
+        )
+        st.session_state['input'] = mt_input
+        
+        # Parse and preview
+        if mt_input and mt_input.strip():
+            fmt = detect_format(mt_input)
+            mt_type = detect_mt_type(mt_input, fmt)
+            mx_type = get_mx_type(mt_type)
+            
+            if fmt == 'json':
+                fields = parse_json(mt_input)
+            else:
+                fields = parse_text(mt_input)
+            
+            st.session_state['fields'] = fields
+            st.session_state['fmt'] = fmt
+            st.session_state['mt_type'] = mt_type
+            
+            # ========== TRANSACTION PREVIEW ==========
+            st.divider()
+            
+            # Header
+            header_col1, header_col2 = st.columns([3, 1])
+            with header_col1:
+                st.markdown("**Transaction Details**")
+            with header_col2:
+                st.code(f"{mt_type} → {mx_type}", language=None)
+            
+            # Amount
+            amt_str = format_amount(fields.get('amt', '0'), fields.get('ccy', 'USD'))
+            st.markdown(f"### 💰 {amt_str}")
+            
+            # Parties
+            party_col1, party_col2 = st.columns(2)
+            
+            with party_col1:
+                st.markdown("**FROM (Sender)**")
+                s_ctry = fields.get('s_ctry', '')
+                st.markdown(f"{get_flag(s_ctry)} **{fields.get('s_name', 'Unknown') or 'Unknown'}**")
+                st.caption(f"Account: `{fields.get('s_acct', 'N/A') or 'N/A'}`")
+                st.caption(f"Country: {s_ctry or 'Unknown'}")
+            
+            with party_col2:
+                st.markdown("**TO (Receiver)**")
+                r_ctry = fields.get('r_ctry', '')
+                st.markdown(f"{get_flag(r_ctry)} **{fields.get('r_name', 'Unknown') or 'Unknown'}**")
+                st.caption(f"Account: `{fields.get('r_acct', 'N/A') or 'N/A'}`")
+                st.caption(f"Country: {r_ctry or 'Unknown'}")
+            
+            # Details
+            st.divider()
+            det_col1, det_col2, det_col3, det_col4 = st.columns(4)
+            
+            with det_col1:
+                st.markdown("**Reference**")
+                st.caption(fields.get('ref', 'N/A') or 'N/A')
+            
+            with det_col2:
+                st.markdown("**Value Date**")
+                st.caption(fields.get('date', 'N/A') or 'N/A')
+            
+            with det_col3:
+                st.markdown("**Sender BIC**")
+                st.caption(fields.get('s_bic', 'N/A') or 'N/A')
+            
+            with det_col4:
+                st.markdown("**Charges**")
+                st.caption(fields.get('charges', 'SHA') or 'SHA')
+            
+            # Remittance
+            if fields.get('remit'):
+                st.divider()
+                st.markdown("**Remittance Information**")
+                st.caption(fields.get('remit', '')[:100])
+            
+            st.divider()
+        
+        # Buttons
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            transform_btn = st.button("🚀 Transform", type="primary", use_container_width=True, disabled=not api_ok)
+        with btn_col2:
+            if st.button("🗑️ Clear", use_container_width=True):
+                st.session_state['result'] = None
+                st.rerun()
+    
+    # OUTPUT
+    with col2:
+        mt_type = st.session_state.get('mt_type', 'MT103')
+        mx_type = get_mx_type(mt_type)
+        st.subheader(f"📤 Output {mx_type}")
+        
+        if 'result' in st.session_state and st.session_state['result']:
+            res = st.session_state['result']
+            
+            if 'error' in res:
+                st.error(f"❌ {res['error']}")
+            else:
+                tab1, tab2 = st.tabs(["📄 XML", "📊 JSON"])
+                
+                with tab1:
+                    xml = res.get('mx_xml', '')
+                    st.code(xml, language='xml')
+                    st.download_button(
+                        "📥 Download XML",
+                        xml,
+                        f"{mx_type}.xml",
+                        "application/xml",
+                        use_container_width=True
+                    )
+                
+                with tab2:
+                    st.json(res.get('mx_structure', {}))
+                
+                # Stats
+                if res.get('statistics'):
+                    st.divider()
+                    stats = res['statistics']
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("Parsed", stats.get('fields_parsed', 0))
+                    c2.metric("Mapped", stats.get('fields_mapped', 0))
+                    c3.metric("Confidence", f"{stats.get('overall_confidence', 0)*100:.0f}%")
+                    c4.metric("Duration", f"{stats.get('total_duration_ms', 0)}ms")
+        else:
+            st.info("👈 Enter MT message and click Transform")
+    
+    # Process
+    if transform_btn and mt_input:
+        with st.spinner("Transforming..."):
+            fmt = st.session_state.get('fmt', 'text')
+            mt_type = st.session_state.get('mt_type', 'MT103')
+            
+            if fmt == 'json':
+                mt_for_api = to_plain_mt(st.session_state.get('fields', {}), mt_type)
+            else:
+                mt_for_api = mt_input
+            
+            st.session_state['result'] = call_api(mt_for_api, approach)
+            st.rerun()
+
+
+if __name__ == "__main__":
+    main()

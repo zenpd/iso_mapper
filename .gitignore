@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[oc]
+*.pyo
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets
+.env
+*.env
+
+# Output data (runtime generated)
+app/output_MXs/
+app/input_MTs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Excel temp files
+~$*.xlsx
+
+# Node (if any frontend)
+node_modules/

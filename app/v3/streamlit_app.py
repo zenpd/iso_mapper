@@ -1,0 +1,696 @@
+"""
+ISO 20022 GenAI Migration Platform - Streamlit UI
+Modern, interactive frontend with real-time transformation visualization
+"""
+
+import streamlit as st
+import requests
+import json
+import time
+from datetime import datetime
+
+# Page configuration
+st.set_page_config(
+    page_title="ISO 20022 GenAI Migration",
+    page_icon="🔄",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS for modern styling
+st.markdown("""
+<style>
+    /* Main container styling */
+    .main .block-container {
+        padding-top: 2rem;
+        max-width: 1400px;
+    }
+    
+    /* Header gradient */
+    .main-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 2rem;
+        border-radius: 16px;
+        color: white;
+        margin-bottom: 2rem;
+        box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+    }
+    
+    .main-header h1 {
+        margin: 0;
+        font-size: 2.5rem;
+        font-weight: 700;
+    }
+    
+    .main-header p {
+        margin: 0.5rem 0 0 0;
+        opacity: 0.9;
+        font-size: 1.1rem;
+    }
+    
+    /* Card styling */
+    .card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e2e8f0;
+        margin-bottom: 1rem;
+    }
+    
+    .card-header {
+        font-weight: 600;
+        font-size: 1.1rem;
+        color: #1e293b;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    /* Agent status cards */
+    .agent-card {
+        padding: 1rem;
+        border-radius: 10px;
+        margin-bottom: 0.75rem;
+        border-left: 4px solid;
+    }
+    
+    .agent-idle {
+        background: #f8fafc;
+        border-left-color: #94a3b8;
+    }
+    
+    .agent-processing {
+        background: #fef3c7;
+        border-left-color: #f59e0b;
+        animation: pulse 2s infinite;
+    }
+    
+    .agent-complete {
+        background: #d1fae5;
+        border-left-color: #10b981;
+    }
+    
+    .agent-warning {
+        background: #fed7aa;
+        border-left-color: #f97316;
+    }
+    
+    .agent-error {
+        background: #fee2e2;
+        border-left-color: #ef4444;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+    
+    /* Stats cards */
+    .stat-card {
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        padding: 1.25rem;
+        border-radius: 12px;
+        text-align: center;
+        border: 1px solid #e2e8f0;
+        transition: transform 0.2s ease;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-2px);
+    }
+    
+    .stat-icon {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .stat-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1e293b;
+        line-height: 1.2;
+    }
+    
+    .stat-label {
+        font-size: 0.8rem;
+        color: #64748b;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    /* Approach badges */
+    .approach-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .badge-rules {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+    
+    .badge-llm {
+        background: #f3e8ff;
+        color: #7c3aed;
+    }
+    
+    .badge-hybrid {
+        background: #d1fae5;
+        color: #059669;
+    }
+    
+    /* Code blocks */
+    .code-block {
+        background: #1e293b;
+        border-radius: 10px;
+        padding: 1rem;
+        overflow-x: auto;
+        font-family: 'Fira Code', 'Consolas', monospace;
+        font-size: 0.85rem;
+        line-height: 1.5;
+    }
+    
+    .code-mt {
+        color: #4ade80;
+    }
+    
+    .code-mx {
+        color: #60a5fa;
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        border-radius: 8px;
+        font-weight: 600;
+        padding: 0.5rem 1.5rem;
+        transition: all 0.2s ease;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    /* Progress indicator */
+    .progress-step {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        border-radius: 8px;
+        margin-bottom: 0.5rem;
+    }
+    
+    .step-active {
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+    }
+    
+    .step-complete {
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+    }
+    
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .main-header h1 {
+            font-size: 1.75rem;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# API Configuration
+API_BASE_URL = "http://localhost:8000"
+
+# Sample messages
+SAMPLE_MESSAGES = {
+    "Standard USD Transfer ($50K)": """:20:TRX2024112001
+:23B:CRED
+:32A:241118USD50000,00
+:50K:/123456789
+ACME CORPORATION
+123 BUSINESS STREET
+NEW YORK, NY 10001
+:52A:CHASUS33XXX
+:59:/987654321
+GLOBAL TRADING LTD
+456 COMMERCE AVENUE
+LONDON, EC2R 8AH
+:70:INVOICE INV-2024-1234
+PAYMENT FOR SERVICES
+:71A:SHA
+:72:/REC/URGENT""",
+    
+    "High Value EUR Transfer (€2.5M)": """:20:TRX2024112002
+:23B:CRED
+:32A:241118EUR2500000,00
+:50K:/DE89370400440532013000
+DEUTSCHE MANUFACTURING GMBH
+INDUSTRIESTRASSE 45
+60329 FRANKFURT
+:52A:DEUTDEFFXXX
+:53B:/D/0198765432
+:59:/GB82WEST12345698765432
+BRITISH IMPORTS PLC
+789 TRADE LANE
+MANCHESTER, M1 2AB
+:70:CONTRACT CON-2024-5678
+Q4 MACHINERY ORDER
+:71A:OUR
+:72:/ACC/PRIORITY""",
+    
+    "Cross-Border GBP Investment (£175K)": """:20:TRX2024112003
+:23B:CRED
+:32A:241118GBP175000,00
+:50K:/GB29NWBK60161331926819
+LONDON TECH VENTURES
+10 INNOVATION SQUARE
+LONDON, SW1A 1AA
+:52A:HSBCGB2LXXX
+:59:/US12345678901234567890
+SILICON VALLEY INNOVATIONS INC
+1 STARTUP BLVD
+SAN FRANCISCO, CA 94105
+:70:SERIES B INVESTMENT
+TRANCHE 2 OF 3
+:71A:BEN
+:72:/INS/INVESTMENT""",
+    
+    "Trade Finance Payment ($850K)": """:20:TRX2024112004
+:23B:CRED
+:32A:241118USD850000,00
+:50K:/AE070331234567890123456
+GULF COMMODITIES TRADING LLC
+AL MAKTOUM TOWER
+DUBAI, UAE
+:52A:ABORAEAAXXX
+:59:/SG1234567890123456
+SINGAPORE METALS PTE LTD
+1 RAFFLES PLACE
+SINGAPORE 048616
+:70:LC REF: LC2024-99887
+COMMODITY PURCHASE
+:71A:SHA"""
+}
+
+
+def check_api_health():
+    """Check if API is running"""
+    try:
+        response = requests.get(f"{API_BASE_URL}/health", timeout=2)
+        return response.status_code == 200
+    except:
+        return False
+
+
+def get_api_config():
+    """Get API configuration"""
+    try:
+        response = requests.get(f"{API_BASE_URL}/config", timeout=2)
+        if response.status_code == 200:
+            return response.json()
+    except:
+        pass
+    return None
+
+
+def transform_message(mt_message: str, approach: str):
+    """Call the transformation API"""
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/transform",
+            json={
+                "mt_message": mt_message,
+                "approach": approach
+            },
+            timeout=60
+        )
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {"error": f"API error: {response.status_code} - {response.text}"}
+    except requests.exceptions.ConnectionError:
+        return {"error": "Cannot connect to API. Please ensure the backend is running."}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def render_agent_card(name: str, result: dict, icon: str):
+    """Render an agent status card"""
+    status = result.get('status', 'idle')
+    status_class = f"agent-{status}"
+    
+    confidence = result.get('confidence')
+    duration = result.get('duration_ms', 0)
+    message = result.get('message', 'Waiting...')
+    
+    confidence_html = f'<span style="float: right; font-weight: 600;">{confidence*100:.0f}%</span>' if confidence else ''
+    
+    st.markdown(f"""
+    <div class="agent-card {status_class}">
+        <div style="font-weight: 600; margin-bottom: 0.5rem;">
+            {icon} {name} {confidence_html}
+        </div>
+        <div style="font-size: 0.85rem; color: #475569;">
+            {message}
+        </div>
+        {f'<div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">{duration}ms</div>' if duration else ''}
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def render_stat_card(icon: str, value: str, label: str):
+    """Render a statistics card"""
+    st.markdown(f"""
+    <div class="stat-card">
+        <div class="stat-icon">{icon}</div>
+        <div class="stat-value">{value}</div>
+        <div class="stat-label">{label}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def main():
+    # Header
+    st.markdown("""
+    <div class="main-header">
+        <h1>🔄 ISO 20022 GenAI Migration Platform</h1>
+        <p>Real-time MT to MX Transformation with LangGraph Agentic AI</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Sidebar
+    with st.sidebar:
+        st.markdown("### ⚙️ Configuration")
+        
+        # API Status
+        api_status = check_api_health()
+        if api_status:
+            st.success("✅ API Connected")
+            config = get_api_config()
+            if config:
+                llm_status = "✅ Configured" if config.get('llm_configured') else "⚠️ Not configured"
+                st.caption(f"LLM: {llm_status}")
+        else:
+            st.error("❌ API Disconnected")
+            st.code("uvicorn main:app --reload", language="bash")
+            st.caption("Run this command to start the API")
+        
+        st.divider()
+        
+        # Approach selection
+        st.markdown("### 🎯 Transformation Approach")
+        approach = st.radio(
+            "Select approach",
+            ["hybrid", "rules", "llm"],
+            format_func=lambda x: {
+                "hybrid": "⚡ Hybrid (Recommended)",
+                "rules": "🔧 Rule-Based Only",
+                "llm": "🧠 LLM-Based Only"
+            }[x],
+            label_visibility="collapsed"
+        )
+        
+        # Approach description
+        approach_info = {
+            "hybrid": "Rules for known fields, LLM for edge cases. Best balance.",
+            "rules": "Deterministic mapping. Fast & high confidence.",
+            "llm": "GPT-4o semantic inference. Handles complex cases."
+        }
+        st.info(approach_info[approach])
+        
+        st.divider()
+        
+        # Sample messages
+        st.markdown("### 📋 Sample Messages")
+        selected_sample = st.selectbox(
+            "Choose sample",
+            list(SAMPLE_MESSAGES.keys()),
+            label_visibility="collapsed"
+        )
+        
+        if st.button("📥 Load Sample", use_container_width=True):
+            st.session_state['mt_input'] = SAMPLE_MESSAGES[selected_sample]
+            st.rerun()
+        
+        st.divider()
+        
+        # Info
+        with st.expander("ℹ️ About"):
+            st.markdown("""
+            **Features:**
+            - LangGraph state machine
+            - Azure OpenAI integration
+            - Knowledge graph enrichment
+            - ISO 20022 schema validation
+            
+            **Supported:**
+            - MT103 → pacs.008
+            - MT202 → pacs.009
+            """)
+    
+    # Main content
+    col_left, col_right = st.columns(2)
+    
+    with col_left:
+        st.markdown("""
+        <div class="card">
+            <div class="card-header">📥 Input: MT103 (SWIFT Legacy)</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        mt_input = st.text_area(
+            "MT Message",
+            value=st.session_state.get('mt_input', SAMPLE_MESSAGES["Standard USD Transfer ($50K)"]),
+            height=400,
+            label_visibility="collapsed",
+            key="mt_message_input"
+        )
+        
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            transform_clicked = st.button(
+                "▶️ Transform",
+                type="primary",
+                use_container_width=True,
+                disabled=not api_status
+            )
+        with col_btn2:
+            if st.button("🔄 Clear", use_container_width=True):
+                st.session_state['result'] = None
+                st.rerun()
+    
+    with col_right:
+        st.markdown("""
+        <div class="card">
+            <div class="card-header">📤 Output: pacs.008 (ISO 20022)</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if 'result' in st.session_state and st.session_state['result']:
+            result = st.session_state['result']
+            
+            if 'error' in result:
+                st.error(result['error'])
+            else:
+                tab_json, tab_xml = st.tabs(["📊 JSON Structure", "📄 XML"])
+                
+                with tab_json:
+                    st.json(result.get('mx_structure', {}))
+                
+                with tab_xml:
+                    st.code(result.get('mx_xml', ''), language='xml')
+        else:
+            st.info("👆 Click **Transform** to see the MX output")
+    
+    # Process transformation
+    if transform_clicked and mt_input:
+        with st.spinner(""):
+            # Progress indicators
+            progress_container = st.container()
+            
+            with progress_container:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                steps = [
+                    ("🔍 Parsing MT message...", 15),
+                    ("🧠 Mapping fields...", 40),
+                    ("✨ Enriching data...", 65),
+                    ("✅ Validating output...", 85),
+                    ("📝 Generating MX...", 100)
+                ]
+                
+                for text, progress in steps[:2]:
+                    status_text.text(text)
+                    progress_bar.progress(progress)
+                    time.sleep(0.2)
+                
+                # Call API
+                result = transform_message(mt_input, approach)
+                
+                if 'error' not in result:
+                    for text, progress in steps[2:]:
+                        status_text.text(text)
+                        progress_bar.progress(progress)
+                        time.sleep(0.15)
+                
+                st.session_state['result'] = result
+            
+            time.sleep(0.3)
+            st.rerun()
+    
+    # Results section
+    if 'result' in st.session_state and st.session_state['result'] and 'error' not in st.session_state['result']:
+        result = st.session_state['result']
+        
+        st.divider()
+        
+        # Agent Pipeline
+        st.markdown("### 🤖 AI Agent Pipeline")
+        
+        agent_cols = st.columns(4)
+        agents_config = [
+            ('parser', 'MT Parser', '📝'),
+            ('mapping', 'Mapping Agent', '🔗'),
+            ('enrichment', 'Enrichment Agent', '✨'),
+            ('validation', 'Validation Agent', '✅')
+        ]
+        
+        for i, (key, name, icon) in enumerate(agents_config):
+            with agent_cols[i]:
+                agent_result = result.get('agent_results', {}).get(key, {})
+                render_agent_card(name, agent_result, icon)
+        
+        # Statistics
+        st.markdown("### 📊 Transformation Statistics")
+        
+        stats = result.get('statistics', {})
+        stat_cols = st.columns(6)
+        
+        stat_items = [
+            ("📝", str(stats.get('fields_parsed', 0)), "Parsed"),
+            ("🔗", str(stats.get('fields_mapped', 0)), "Mapped"),
+            ("✨", str(stats.get('fields_enriched', 0)), "Enriched"),
+            ("🎯", f"{stats.get('overall_confidence', 0)*100:.0f}%", "Confidence"),
+            ("✅", f"{stats.get('validation_score', 0):.0f}%", "Validation"),
+            ("⏱️", f"{stats.get('total_duration_ms', 0)}ms", "Duration")
+        ]
+        
+        for i, (icon, value, label) in enumerate(stat_items):
+            with stat_cols[i]:
+                render_stat_card(icon, value, label)
+        
+        # Download buttons
+        st.markdown("### 💾 Export")
+        
+        dl_cols = st.columns(3)
+        
+        with dl_cols[0]:
+            st.download_button(
+                "📥 Download JSON",
+                json.dumps(result.get('mx_structure', {}), indent=2),
+                file_name=f"mx_{result.get('message_id', 'output')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+        
+        with dl_cols[1]:
+            st.download_button(
+                "📥 Download XML",
+                result.get('mx_xml', ''),
+                file_name=f"mx_{result.get('message_id', 'output')}.xml",
+                mime="application/xml",
+                use_container_width=True
+            )
+        
+        with dl_cols[2]:
+            st.download_button(
+                "📥 Full Report",
+                json.dumps(result, indent=2, default=str),
+                file_name=f"report_{result.get('message_id', 'output')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+    
+    # Approach comparison
+    with st.expander("📚 Approach Comparison & Architecture"):
+        tab_comp, tab_arch = st.tabs(["Comparison", "Architecture"])
+        
+        with tab_comp:
+            comp_cols = st.columns(3)
+            
+            with comp_cols[0]:
+                st.markdown("""
+                #### 🔧 Rule-Based
+                - **Confidence:** 98%+
+                - **Latency:** ~50ms
+                - **Best for:** Standard messages
+                
+                ✅ Deterministic  
+                ✅ High performance  
+                ❌ Limited flexibility
+                """)
+            
+            with comp_cols[1]:
+                st.markdown("""
+                #### 🧠 LLM-Based
+                - **Confidence:** 90-95%
+                - **Latency:** ~300ms
+                - **Best for:** Complex cases
+                
+                ✅ Semantic understanding  
+                ✅ Handles edge cases  
+                ❌ Higher latency
+                """)
+            
+            with comp_cols[2]:
+                st.markdown("""
+                #### ⚡ Hybrid
+                - **Confidence:** 95-98%
+                - **Latency:** ~150ms
+                - **Best for:** All scenarios
+                
+                ✅ Rules for known fields  
+                ✅ LLM for unknowns  
+                ✅ Optimal balance
+                """)
+        
+        with tab_arch:
+            st.markdown("""
+            #### LangGraph Pipeline Architecture
+            
+            ```
+            ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+            │   MT103     │ ──▶ │   Parser    │ ──▶ │   Mapping   │ ──▶ │ Enrichment  │ ──▶ │ Validation  │
+            │   Input     │     │   Agent     │     │   Agent     │     │   Agent     │     │   Agent     │
+            └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+                                      │                   │                   │                   │
+                                      ▼                   ▼                   ▼                   ▼
+                                  Extract            Rule/LLM           Knowledge          Schema +
+                                  Fields             Mapping           Graph + ML          Contextual
+            ```
+            
+            **Components:**
+            - **LangGraph State Machine:** Manages workflow state and transitions
+            - **Azure OpenAI:** GPT-4o for semantic analysis and inference
+            - **Knowledge Graph:** BIC directory, regulatory requirements
+            - **Schema Validator:** ISO 20022 XSD compliance checking
+            """)
+
+
+if __name__ == "__main__":
+    main()

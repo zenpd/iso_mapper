@@ -1,0 +1,30 @@
+# Core Framework
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+
+# LangGraph & LangChain
+langgraph
+langchain
+langchain-core
+
+# Azure OpenAI
+openai
+
+# HTTP & Async
+httpx
+aiohttp
+requests
+
+# Retry logic
+tenacity
+
+# Streamlit UI
+streamlit
+
+# Environment
+python-dotenv
+
+# Utilities
+python-multipart
