@@ -1,0 +1,354 @@
+{
+  "statistics": {
+    "total_messages": 5,
+    "successful": 2,
+    "failed": 3,
+    "enriched_fields": 8,
+    "validation_errors": 0,
+    "success_rate": "40.00%"
+  },
+  "results": [
+    {
+      "status": "failed",
+      "message_id": "SWIFT-MT202-0001",
+      "error": "'mx_path'",
+      "timestamp": "2025-11-13T17:11:35.143944"
+    },
+    {
+      "status": "success",
+      "message_id": "SWIFT-MT103-0002",
+      "mt_message": {
+        "message_id": "SWIFT-MT103-0002",
+        "message_type": "MT103",
+        "mx_equivalent": "pacs.008",
+        "fields": {
+          "transaction_reference": "REFERENCE003",
+          "value_date": "241025",
+          "currency": "USD",
+          "amount": "100000.00",
+          "ordering_customer": "/US98765432109876543210\nGlobal Imports Inc\n555 Commerce Blvd\nLos Angeles, CA 90001",
+          "beneficiary_customer": "/JP1234567890123456789012\nTokyo Exports KK\n10-1 Shibuya\nTokyo 150-0002",
+          "remittance_info": "Purchase order PO-2024-5678\nElectronic components",
+          "charge_bearer": "BEN"
+        },
+        "raw": ":20:REFERENCE003\n:32A:241025USD100000.00\n:50K:/US98765432109876543210\nGlobal Imports Inc\n555 Commerce Blvd\nLos Angeles, CA 90001\n:59:/JP1234567890123456789012\nTokyo Exports KK\n10-1 Shibuya\nTokyo 150-0002\n:70:Purchase order PO-2024-5678\nElectronic components\n:71A:BEN"
+      },
+      "mx_message": {
+        "mx_type": "pacs.008",
+        "version": "001.08",
+        "structure": {
+          "Document": {
+            "FIToFICstmrCdtTrf": {
+              "GrpHdr": {
+                "MsgId": "MX20251113171135413477",
+                "CreDtTm": "2025-11-13T17:11:35.407588Z"
+              },
+              "CdtTrfTxInf": {
+                "InstrId": "REFERENCE003",
+                "IntrBkSttlmDt": "241025",
+                "Ccy": "USD",
+                "Value": "100000.00",
+                "Dbtr": "/US98765432109876543210\nGlobal Imports Inc\n555 Commerce Blvd\nLos Angeles, CA 90001",
+                "Cdtr": "/JP1234567890123456789012\nTokyo Exports KK\n10-1 Shibuya\nTokyo 150-0002",
+                "Ustrd": "Purchase order PO-2024-5678\nElectronic components",
+                "ChrgBr": "BEN",
+                "EndToEndId": "E2E-REFERENCE003",
+                "Ctry": "US"
+              }
+            }
+          }
+        },
+        "xml": "<Document xmlns=\"urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><Document><FIToFICstmrCdtTrf><GrpHdr><MsgId>MX20251113171135413477</MsgId><CreDtTm>2025-11-13T17:11:35.407588Z</CreDtTm></GrpHdr><CdtTrfTxInf><InstrId>REFERENCE003</InstrId><IntrBkSttlmDt>241025</IntrBkSttlmDt><Ccy>USD</Ccy><Value>100000.00</Value><Dbtr>/US98765432109876543210\nGlobal Imports Inc\n555 Commerce Blvd\nLos Angeles, CA 90001</Dbtr><Cdtr>/JP1234567890123456789012\nTokyo Exports KK\n10-1 Shibuya\nTokyo 150-0002</Cdtr><Ustrd>Purchase order PO-2024-5678\nElectronic components</Ustrd><ChrgBr>BEN</ChrgBr><EndToEndId>E2E-REFERENCE003</EndToEndId><Ctry>US</Ctry></CdtTrfTxInf></FIToFICstmrCdtTrf></Document></Document>",
+        "fields": {
+          "CdtTrfTxInf.PmtId.InstrId": {
+            "value": "REFERENCE003",
+            "confidence": 0.98,
+            "reasoning": "Direct mapping - both represent unique transaction identifier",
+            "source_field": "transaction_reference"
+          },
+          "CdtTrfTxInf.IntrBkSttlmDt": {
+            "value": "241025",
+            "confidence": 0.99,
+            "reasoning": "Value date maps to interbank settlement date",
+            "source_field": "value_date"
+          },
+          "CdtTrfTxInf.IntrBkSttlmAmt.Ccy": {
+            "value": "USD",
+            "confidence": 1.0,
+            "reasoning": "Currency code - exact match",
+            "source_field": "currency"
+          },
+          "CdtTrfTxInf.IntrBkSttlmAmt.Value": {
+            "value": "100000.00",
+            "confidence": 1.0,
+            "reasoning": "Amount value - exact match",
+            "source_field": "amount"
+          },
+          "CdtTrfTxInf.Dbtr": {
+            "value": "/US98765432109876543210\nGlobal Imports Inc\n555 Commerce Blvd\nLos Angeles, CA 90001",
+            "confidence": 0.97,
+            "reasoning": "Ordering customer is debtor in MX format",
+            "source_field": "ordering_customer"
+          },
+          "CdtTrfTxInf.Cdtr": {
+            "value": "/JP1234567890123456789012\nTokyo Exports KK\n10-1 Shibuya\nTokyo 150-0002",
+            "confidence": 0.97,
+            "reasoning": "Beneficiary customer is creditor in MX format",
+            "source_field": "beneficiary_customer"
+          },
+          "CdtTrfTxInf.RmtInf.Ustrd": {
+            "value": "Purchase order PO-2024-5678\nElectronic components",
+            "confidence": 0.95,
+            "reasoning": "Remittance information maps to unstructured remittance",
+            "source_field": "remittance_info"
+          },
+          "CdtTrfTxInf.ChrgBr": {
+            "value": "BEN",
+            "confidence": 1.0,
+            "reasoning": "Charge bearer code - direct mapping",
+            "source_field": "charge_bearer"
+          },
+          "GrpHdr.MsgId": {
+            "value": "MX20251113171135413477",
+            "confidence": 1.0,
+            "reasoning": "AI generated unique message identifier",
+            "enrichment_type": "generated"
+          },
+          "GrpHdr.CreDtTm": {
+            "value": "2025-11-13T17:11:35.407588Z",
+            "confidence": 1.0,
+            "reasoning": "AI populated with current UTC timestamp",
+            "enrichment_type": "generated"
+          },
+          "CdtTrfTxInf.PmtId.EndToEndId": {
+            "value": "E2E-REFERENCE003",
+            "confidence": 0.92,
+            "reasoning": "AI inferred from transaction reference",
+            "enrichment_type": "inferred"
+          },
+          "_metadata": {
+            "bic_enrichment": {
+              "fields_added": 0,
+              "actions": []
+            }
+          },
+          "CdtTrfTxInf.Cdtr.PstlAdr.Ctry": {
+            "value": "US",
+            "confidence": 0.85,
+            "reasoning": "ML model predicted country code from transaction pattern",
+            "enrichment_type": "ml_prediction"
+          }
+        },
+        "generated_at": "2025-11-13T17:11:35.641275Z"
+      },
+      "validation": {
+        "is_valid": true,
+        "compliance_score": 100,
+        "errors": [],
+        "warnings": [],
+        "suggestions": [],
+        "validated_at": "ISO_20022_XSD_SR2025",
+        "ai_method": "Rule-based validation + LLM contextual analysis"
+      },
+      "posting": {
+        "status": "success",
+        "transaction_id": "TX20251113171136304519",
+        "posted_at": "2025-11-13T17:11:36.056497Z",
+        "ledger_entry": {
+          "transaction_id": "TX20251113171136304519",
+          "mx_type": "pacs.008",
+          "amount": 100000.0,
+          "currency": "USD",
+          "debit_account": null,
+          "credit_account": null,
+          "status": "posted",
+          "posted_at": "2025-11-13T17:11:36.056497Z",
+          "value_date": "241025",
+          "reconciliation_status": "pending"
+        },
+        "integration_method": "REST API (modern core) / MQ Bridge (legacy COBOL)",
+        "stp_rate": "95%"
+      },
+      "timestamp": "2025-11-13T17:11:36.058594"
+    },
+    {
+      "status": "success",
+      "message_id": "SWIFT-MT103-0003",
+      "mt_message": {
+        "message_id": "SWIFT-MT103-0003",
+        "message_type": "MT103",
+        "mx_equivalent": "pacs.008",
+        "fields": {
+          "transaction_reference": "REFERENCE002",
+          "value_date": "241024",
+          "currency": "EUR",
+          "amount": "25000.00",
+          "ordering_customer": "/GB82WEST12345698765432\nTech Solutions Ltd\n789 Oxford Street\nLondon W1D 2HG",
+          "beneficiary_customer": "/FR1420041010050500013M02606\nParis Trading SA\n12 Rue de la Paix\nParis 75002",
+          "remittance_info": "Contract payment Q4-2024\nConsulting services",
+          "charge_bearer": "OUR"
+        },
+        "raw": ":20:REFERENCE002\n:32A:241024EUR25000.00\n:50K:/GB82WEST12345698765432\nTech Solutions Ltd\n789 Oxford Street\nLondon W1D 2HG\n:59:/FR1420041010050500013M02606\nParis Trading SA\n12 Rue de la Paix\nParis 75002\n:70:Contract payment Q4-2024\nConsulting services\n:71A:OUR"
+      },
+      "mx_message": {
+        "mx_type": "pacs.008",
+        "version": "001.08",
+        "structure": {
+          "Document": {
+            "FIToFICstmrCdtTrf": {
+              "GrpHdr": {
+                "MsgId": "MX20251113171136197958",
+                "CreDtTm": "2025-11-13T17:11:36.332611Z"
+              },
+              "CdtTrfTxInf": {
+                "InstrId": "REFERENCE002",
+                "IntrBkSttlmDt": "241024",
+                "Ccy": "EUR",
+                "Value": "25000.00",
+                "Dbtr": "/GB82WEST12345698765432\nTech Solutions Ltd\n789 Oxford Street\nLondon W1D 2HG",
+                "Cdtr": "/FR1420041010050500013M02606\nParis Trading SA\n12 Rue de la Paix\nParis 75002",
+                "Ustrd": "Contract payment Q4-2024\nConsulting services",
+                "ChrgBr": "OUR",
+                "EndToEndId": "E2E-REFERENCE002",
+                "Ctry": "US"
+              }
+            }
+          }
+        },
+        "xml": "<Document xmlns=\"urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><Document><FIToFICstmrCdtTrf><GrpHdr><MsgId>MX20251113171136197958</MsgId><CreDtTm>2025-11-13T17:11:36.332611Z</CreDtTm></GrpHdr><CdtTrfTxInf><InstrId>REFERENCE002</InstrId><IntrBkSttlmDt>241024</IntrBkSttlmDt><Ccy>EUR</Ccy><Value>25000.00</Value><Dbtr>/GB82WEST12345698765432\nTech Solutions Ltd\n789 Oxford Street\nLondon W1D 2HG</Dbtr><Cdtr>/FR1420041010050500013M02606\nParis Trading SA\n12 Rue de la Paix\nParis 75002</Cdtr><Ustrd>Contract payment Q4-2024\nConsulting services</Ustrd><ChrgBr>OUR</ChrgBr><EndToEndId>E2E-REFERENCE002</EndToEndId><Ctry>US</Ctry></CdtTrfTxInf></FIToFICstmrCdtTrf></Document></Document>",
+        "fields": {
+          "CdtTrfTxInf.PmtId.InstrId": {
+            "value": "REFERENCE002",
+            "confidence": 0.98,
+            "reasoning": "Direct mapping - both represent unique transaction identifier",
+            "source_field": "transaction_reference"
+          },
+          "CdtTrfTxInf.IntrBkSttlmDt": {
+            "value": "241024",
+            "confidence": 0.99,
+            "reasoning": "Value date maps to interbank settlement date",
+            "source_field": "value_date"
+          },
+          "CdtTrfTxInf.IntrBkSttlmAmt.Ccy": {
+            "value": "EUR",
+            "confidence": 1.0,
+            "reasoning": "Currency code - exact match",
+            "source_field": "currency"
+          },
+          "CdtTrfTxInf.IntrBkSttlmAmt.Value": {
+            "value": "25000.00",
+            "confidence": 1.0,
+            "reasoning": "Amount value - exact match",
+            "source_field": "amount"
+          },
+          "CdtTrfTxInf.Dbtr": {
+            "value": "/GB82WEST12345698765432\nTech Solutions Ltd\n789 Oxford Street\nLondon W1D 2HG",
+            "confidence": 0.97,
+            "reasoning": "Ordering customer is debtor in MX format",
+            "source_field": "ordering_customer"
+          },
+          "CdtTrfTxInf.Cdtr": {
+            "value": "/FR1420041010050500013M02606\nParis Trading SA\n12 Rue de la Paix\nParis 75002",
+            "confidence": 0.97,
+            "reasoning": "Beneficiary customer is creditor in MX format",
+            "source_field": "beneficiary_customer"
+          },
+          "CdtTrfTxInf.RmtInf.Ustrd": {
+            "value": "Contract payment Q4-2024\nConsulting services",
+            "confidence": 0.95,
+            "reasoning": "Remittance information maps to unstructured remittance",
+            "source_field": "remittance_info"
+          },
+          "CdtTrfTxInf.ChrgBr": {
+            "value": "OUR",
+            "confidence": 1.0,
+            "reasoning": "Charge bearer code - direct mapping",
+            "source_field": "charge_bearer"
+          },
+          "GrpHdr.MsgId": {
+            "value": "MX20251113171136197958",
+            "confidence": 1.0,
+            "reasoning": "AI generated unique message identifier",
+            "enrichment_type": "generated"
+          },
+          "GrpHdr.CreDtTm": {
+            "value": "2025-11-13T17:11:36.332611Z",
+            "confidence": 1.0,
+            "reasoning": "AI populated with current UTC timestamp",
+            "enrichment_type": "generated"
+          },
+          "CdtTrfTxInf.PmtId.EndToEndId": {
+            "value": "E2E-REFERENCE002",
+            "confidence": 0.92,
+            "reasoning": "AI inferred from transaction reference",
+            "enrichment_type": "inferred"
+          },
+          "_metadata": {
+            "bic_enrichment": {
+              "fields_added": 0,
+              "actions": []
+            }
+          },
+          "CdtTrfTxInf.Cdtr.PstlAdr.Ctry": {
+            "value": "US",
+            "confidence": 0.85,
+            "reasoning": "ML model predicted country code from transaction pattern",
+            "enrichment_type": "ml_prediction"
+          }
+        },
+        "generated_at": "2025-11-13T17:11:36.552254Z"
+      },
+      "validation": {
+        "is_valid": true,
+        "compliance_score": 97,
+        "errors": [],
+        "warnings": [
+          {
+            "type": "contextual_warning",
+            "field": "CdtTrfTxInf.IntrBkSttlmDt",
+            "severity": "warning",
+            "message": "AI detected potentially unusual settlement date pattern",
+            "ai_confidence": 0.78,
+            "reasoning": "Based on historical transaction patterns, this date seems atypical"
+          }
+        ],
+        "suggestions": [],
+        "validated_at": "ISO_20022_XSD_SR2025",
+        "ai_method": "Rule-based validation + LLM contextual analysis"
+      },
+      "posting": {
+        "status": "success",
+        "transaction_id": "TX20251113171137387071",
+        "posted_at": "2025-11-13T17:11:37.021439Z",
+        "ledger_entry": {
+          "transaction_id": "TX20251113171137387071",
+          "mx_type": "pacs.008",
+          "amount": 25000.0,
+          "currency": "EUR",
+          "debit_account": null,
+          "credit_account": null,
+          "status": "posted",
+          "posted_at": "2025-11-13T17:11:37.021439Z",
+          "value_date": "241024",
+          "reconciliation_status": "pending"
+        },
+        "integration_method": "REST API (modern core) / MQ Bridge (legacy COBOL)",
+        "stp_rate": "95%"
+      },
+      "timestamp": "2025-11-13T17:11:37.022053"
+    },
+    {
+      "status": "failed",
+      "message_id": "SWIFT-MT202-0004",
+      "error": "'mx_path'",
+      "timestamp": "2025-11-13T17:11:37.130011"
+    },
+    {
+      "status": "failed",
+      "message_id": "SWIFT-MT202-0005",
+      "error": "'mx_path'",
+      "timestamp": "2025-11-13T17:11:37.239925"
+    }
+  ],
+  "timestamp": "2025-11-13T17:11:37.242458"
+}

@@ -1,0 +1,98 @@
+<!-- ---------------------------------------------
+     PACS.008 SAMPLE - CUSTOMER CREDIT TRANSFER (MX)
+     ---------------------------------------------
+     ✅ Mandatory Fields (as per specification):
+
+     <GrpHdr>
+        <MsgId>
+        <CreDtTm>
+        <NbOfTxs>
+
+     <SttlmInf>
+        <SttlmMtd>
+
+     <CdtTrfTxInf>
+        <PmtId>
+        <IntrBkSttlmAmt>
+        <ChrgBr>
+        <Dbtr>
+        <DbtrAgt>
+        <CdtrAgt>
+        <Cdtr>
+
+     ---------------------------------------------
+     Mapping alignment with MT103:
+     :20  → <MsgId>
+     :32A → <IntrBkSttlmAmt>
+     :50  → <Dbtr>
+     :57A → <CdtrAgt>
+     :59  → <Cdtr>
+     :71A → <ChrgBr>
+     :70  → <RmtInf>
+     --------------------------------------------- -->
+
+<Document>
+  <FIToFICstmrCdtTrf>
+
+    <GrpHdr>
+      <MsgId>REFMT103001</MsgId>
+      <CreDtTm>2026-06-05T10:30:00</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+    </GrpHdr>
+
+    <SttlmInf>
+      <SttlmMtd>INDA</SttlmMtd>
+    </SttlmInf>
+
+    <CdtTrfTxInf>
+
+      <PmtId>
+        <EndToEndId>REFMT103001</EndToEndId>
+      </PmtId>
+
+      <IntrBkSttlmAmt Ccy="USD">50000.00</IntrBkSttlmAmt>
+
+      <ChrgBr>SHAR</ChrgBr>
+
+      <Dbtr>
+        <Nm>JOHN DOE</Nm>
+        <PstlAdr>
+          <Ctry>IN</Ctry>
+          <AdrLine>MUMBAI</AdrLine>
+        </PstlAdr>
+      </Dbtr>
+
+      <DbtrAgt>
+        <FinInstnId>
+          <BICFI>BANKINXX</BICFI>
+        </FinInstnId>
+      </DbtrAgt>
+
+      <CdtrAgt>
+        <FinInstnId>
+          <BICFI>BANKUSXX</BICFI>
+        </FinInstnId>
+      </CdtrAgt>
+
+      <Cdtr>
+        <Nm>JANE SMITH</Nm>
+        <PstlAdr>
+          <Ctry>US</Ctry>
+          <AdrLine>NEW YORK</AdrLine>
+        </PstlAdr>
+      </Cdtr>
+
+      <CdtrAcct>
+        <Id>
+          <IBAN>987654321</IBAN>
+        </Id>
+      </CdtrAcct>
+
+      <RmtInf>
+        <Ustrd>Invoice 12345</Ustrd>
+      </RmtInf>
+
+    </CdtTrfTxInf>
+
+  </FIToFICstmrCdtTrf>
+</Document>

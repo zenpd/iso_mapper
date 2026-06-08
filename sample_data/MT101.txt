@@ -1,0 +1,31 @@
+# ---------------------------------------------
+# MT101 SAMPLE - CUSTOMER PAYMENT INSTRUCTION
+# ---------------------------------------------
+# ✅ Mandatory Fields (as per specification):
+# :20: Sender Reference
+# :28D: Message Index/Total
+# :30: Requested Execution Date
+# :21: Transaction Reference
+# :32B: Currency/Amount
+# :71A: Details of Charges
+# ---------------------------------------------
+
+{1:F01BANKINXX0000000000}
+{2:I101BANKUSXXAXXXN}
+{4:
+:20:REFMT101001
+:28D:1/1
+:50H:/123456789
+JOHN DOE
+MUMBAI
+INDIA
+:52A:BANKINXX
+:30:260605
+:21:TXNREF001
+:32B:USD1000,00
+:59:/987654321
+JANE SMITH
+NEW YORK
+USA
+:71A:SHA
+-}

@@ -1,0 +1,108 @@
+<!-- ---------------------------------------------
+     PAIN.001 SAMPLE - CUSTOMER PAYMENT INITIATION
+     ---------------------------------------------
+     ✅ Mandatory Fields (as per specification):
+
+     <GrpHdr>
+        <MsgId>
+        <CreDtTm>
+        <NbOfTxs>
+
+     <PmtInf>
+        <PmtInfId>
+        <ReqdExctnDt>
+
+     <CdtTrfTxInf>
+        <PmtId>
+        <InstdAmt>
+        <Dbtr>
+        <DbtrAgt>
+        <CdtrAgt>
+        <Cdtr>
+        <ChrgBr>
+
+     ---------------------------------------------
+     Mapping alignment with MT101:
+     :20  → <MsgId>
+     :21  → <EndToEndId>
+     :32B → <InstdAmt>
+     :50  → <Dbtr>
+     :59  → <Cdtr>
+     :71A → <ChrgBr>
+     --------------------------------------------- -->
+
+<Document>
+  <CstmrCdtTrfInitn>
+
+    <GrpHdr>
+      <MsgId>REFMT101001</MsgId>
+      <CreDtTm>2026-06-05T10:30:00</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+    </GrpHdr>
+
+    <PmtInf>
+      <PmtInfId>PMT101001</PmtInfId>
+      <ReqdExctnDt>2026-06-05</ReqdExctnDt>
+
+      <Dbtr>
+        <Nm>JOHN DOE</Nm>
+        <PstlAdr>
+          <Ctry>IN</Ctry>
+          <AdrLine>MUMBAI</AdrLine>
+        </PstlAdr>
+      </Dbtr>
+
+      <DbtrAcct>
+        <Id>
+          <IBAN>123456789</IBAN>
+        </Id>
+      </DbtrAcct>
+
+      <DbtrAgt>
+        <FinInstnId>
+          <BICFI>BANKINXX</BICFI>
+        </FinInstnId>
+      </DbtrAgt>
+
+      <CdtTrfTxInf>
+
+        <PmtId>
+          <EndToEndId>TXNREF001</EndToEndId>
+        </PmtId>
+
+        <Amt>
+          <InstdAmt Ccy="USD">1000.00</InstdAmt>
+        </Amt>
+
+        <CdtrAgt>
+          <FinInstnId>
+            <BIC> BANKUSXX </BIC>
+          </FinInstnId>
+        </CdtrAgt>
+
+        <Cdtr>
+          <Nm>JANE SMITH</Nm>
+          <PstlAdr>
+            <Ctry>US</Ctry>
+            <AdrLine>NEW YORK</AdrLine>
+          </PstlAdr>
+        </Cdtr>
+
+        <CdtrAcct>
+          <Id>
+            <IBAN>987654321</IBAN>
+          </Id>
+        </CdtrAcct>
+
+        <RmtInf>
+          <Ustrd>Invoice 12345</Ustrd>
+        </RmtInf>
+
+        <ChrgBr>SHAR</ChrgBr>
+
+      </CdtTrfTxInf>
+
+    </PmtInf>
+
+  </CstmrCdtTrfInitn>
+</Document>

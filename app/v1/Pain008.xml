@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.008.001.08">
+  <CstmrDrctDbtInitn>
+    <GrpHdr>
+      <MsgId>DD20250730-001</MsgId>
+      <CreDtTm>2025-07-30T09:00:00</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <CtrlSum>250.00</CtrlSum>
+      <InitgPty>
+        <Nm>ABC Utilities Ltd</Nm>
+      </InitgPty>
+    </GrpHdr>
+    <PmtInf>
+      <PmtInfId>PMTINF-DD-001</PmtInfId>
+      <PmtMtd>DD</PmtMtd>
+      <BtchBookg>true</BtchBookg>
+      <NbOfTxs>1</NbOfTxs>
+      <CtrlSum>250.00</CtrlSum>
+      <PmtTpInf>
+        <SvcLvl>
+          <Cd>SEPA</Cd>
+        </SvcLvl>
+        <LclInstrm>
+          <Cd>CORE</Cd>
+        </LclInstrm>
+        <SeqTp>RCUR</SeqTp>
+      </PmtTpInf>
+      <ReqdColltnDt>2025-08-01</ReqdColltnDt>
+      <Cdtr>
+        <Nm>ABC Utilities Ltd</Nm>
+      </Cdtr>
+      <CdtrAcct>
+        <Id>
+          <IBAN>DE75512108001245126199</IBAN>
+        </Id>
+      </CdtrAcct>
+      <CdtrAgt>
+        <FinInstnId>
+          <BIC>COBADEFFXXX</BIC>
+        </FinInstnId>
+      </CdtrAgt>
+      <ChrgBr>SLEV</ChrgBr>
+      <DrctDbtTxInf>
+        <PmtId>
+          <EndToEndId>INV20250730-987</EndToEndId>
+        </PmtId>
+        <InstdAmt Ccy="EUR">250.00</InstdAmt>
+        <DrctDbtTx>
+          <MndtRltdInf>
+            <MndtId>MANDATE-001</MndtId>
+            <DtOfSgntr>2024-05-15</DtOfSgntr>
+          </MndtRltdInf>
+        </DrctDbtTx>
+        <DbtrAgt>
+          <FinInstnId>
+            <BIC>BNPAFRPPXXX</BIC>
+          </FinInstnId>
+        </DbtrAgt>
+        <Dbtr>
+          <Nm>John Doe</Nm>
+        </Dbtr>
+        <DbtrAcct>
+          <Id>
+            <IBAN>FR7612345987650123456789014</IBAN>
+          </Id>
+        </DbtrAcct>
+        <RmtInf>
+          <Ustrd>Electricity Bill July 2025</Ustrd>
+        </RmtInf>
+      </DrctDbtTxInf>
+    </PmtInf>
+  </CstmrDrctDbtInitn>
+</Document>

@@ -1,0 +1,30 @@
+# ---------------------------------------------
+# MT103 SAMPLE - CUSTOMER CREDIT TRANSFER
+# ---------------------------------------------
+# ✅ Mandatory Fields (as per specification):
+# :20: Sender Reference
+# :23B: Bank Operation Code
+# :32A: Value Date / Currency / Amount
+# :50a: Ordering Customer
+# :59a: Beneficiary Customer
+# :71A: Details of Charges
+# ---------------------------------------------
+# Use this format as reference for MT103 generation and validation
+
+{1:F01BANKINXX0000000000}
+{2:I103BANKUSXXAXXXN}
+{4:
+:20:REFMT103001
+:23B:CRED
+:32A:260605USD50000,00
+:50K:/123456789
+JOHN DOE
+MUMBAI
+INDIA
+:59:/987654321
+JANE SMITH
+NEW YORK
+USA
+:70:Invoice 12345
+:71A:SHA
+-}

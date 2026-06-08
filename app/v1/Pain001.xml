@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03">
+  <CstmrCdtTrfInitn>
+    <GrpHdr>
+      <MsgId>MSG20250730-001</MsgId>
+      <CreDtTm>2025-07-30T10:15:00</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <CtrlSum>100.00</CtrlSum>
+      <InitgPty>
+        <Nm>ABC Corporation</Nm>
+      </InitgPty>
+    </GrpHdr>
+    <PmtInf>
+      <PmtInfId>PMTINF20250730-001</PmtInfId>
+      <PmtMtd>TRF</PmtMtd>
+      <BtchBookg>true</BtchBookg>
+      <NbOfTxs>1</NbOfTxs>
+      <CtrlSum>100.00</CtrlSum>
+      <PmtTpInf>
+        <SvcLvl>
+          <Cd>SEPA</Cd>
+        </SvcLvl>
+      </PmtTpInf>
+      <ReqdExctnDt>2025-07-31</ReqdExctnDt>
+      <Dbtr>
+        <Nm>ABC Corporation</Nm>
+      </Dbtr>
+      <DbtrAcct>
+        <Id>
+          <IBAN>DE89370400440532013000</IBAN>
+        </Id>
+      </DbtrAcct>
+      <DbtrAgt>
+        <FinInstnId>
+          <BIC>DEUTDEFF</BIC>
+        </FinInstnId>
+      </DbtrAgt>
+      <CdtTrfTxInf>
+        <PmtId>
+          <EndToEndId>INV20250730-001</EndToEndId>
+        </PmtId>
+        <Amt>
+          <InstdAmt Ccy="EUR">100.00</InstdAmt>
+        </Amt>
+        <CdtrAgt>
+          <FinInst

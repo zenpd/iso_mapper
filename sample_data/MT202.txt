@@ -1,0 +1,21 @@
+# ---------------------------------------------
+# MT202 SAMPLE - BANK TO BANK TRANSFER
+# ---------------------------------------------
+# ✅ Mandatory Fields (as per specification):
+# :20: Sender Reference
+# :21: Related Reference
+# :32A: Value Date / Currency / Amount
+# :58A: Beneficiary Institution
+# ---------------------------------------------
+# Use this format as reference for MT202 generation and validation
+
+{1:F01BANKINXX0000000000}
+{2:I202BANKUSXXAXXXN}
+{4:
+:20:REFMT202001
+:21:RELREF001
+:32A:260605USD50000,00
+:52A:BANKINXX
+:58A:BANKUSXX
+:72:/INS/FUND TRANSFER
+-}

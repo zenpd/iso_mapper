@@ -1,0 +1,55 @@
+<!-- ---------------------------------------------
+     PACS.009 SAMPLE - FINANCIAL INSTITUTION TRANSFER
+     ---------------------------------------------
+     ✅ Mandatory Fields (as per specification):
+
+     <GrpHdr>
+        <MsgId>
+        <CreDtTm>
+        <NbOfTxs>
+
+     <CdtTrfTxInf>
+        <PmtId>
+        <IntrBkSttlmAmt>
+        <ChrgBr>
+        <InstgAgt>
+        <InstdAgt>
+
+     ---------------------------------------------
+     Mapping alignment with MT202:
+     :20  → <MsgId>
+     :21  → <EndToEndId>
+     :32A → <IntrBkSttlmAmt>
+     :52A → <InstgAgt>
+     :58A → <InstdAgt>
+     --------------------------------------------- -->
+
+<Document>
+  <FIToFICstmrCdtTrf>
+
+    <GrpHdr>
+      <MsgId>REFMT202001</MsgId>
+      <CreDtTm>2026-06-05T10:30:00</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+    </GrpHdr>
+
+    <CdtTrfTxInf>
+
+      <PmtId>
+        <EndToEndId>RELREF001</EndToEndId>
+      </PmtId>
+
+      <IntrBkSttlmAmt Ccy="USD">50000.00</IntrBkSttlmAmt>
+
+      <ChrgBr>SHAR</ChrgBr>
+
+      <InstgAgt>
+        <FinInstnId>
+          <BICFI>BANKINXX</BICFI>
+        </FinInstnId>
+      </InstgAgt>
+
+      <InstdAgt>
+        <FinInstnId>
+          <BICFI>BANKUSXX</BICFI>
+        </FinInstnId>

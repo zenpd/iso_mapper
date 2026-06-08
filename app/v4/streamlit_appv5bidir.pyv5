@@ -1,0 +1,826 @@
+"""
+ISO 20022 Migration Platform - Bidirectional Transformation
+MT101 ↔ pain.001 | MT103 ↔ pacs.008
+"""
+
+import streamlit as st
+import requests
+import json
+import re
+from datetime import datetime
+from typing import Dict, Any, Tuple
+
+st.set_page_config(
+    page_title="ISO 20022 Migration",
+    page_icon="🔄",
+    layout="wide"
+)
+
+API_URL = "http://localhost:8000"
+
+# Sample messages
+SAMPLES = {
+    "MT103 - USD Transfer": """:20:TRX2024112001
+:23B:CRED
+:32A:241118USD50000,00
+:50K:/123456789
+ACME CORPORATION
+123 BUSINESS STREET
+NEW YORK, NY 10001
+:52A:CHASUS33XXX
+:59:/987654321
+GLOBAL TRADING LTD
+456 COMMERCE AVENUE
+LONDON, EC2R 8AH
+:70:INVOICE INV-2024-1234
+:71A:SHA""",
+    "MT101 - Payment Request": """:20:PAYREQ001
+:28D:1/1
+:30:241120
+:25:/123456789
+:50H:/DE89370400440532013000
+ORDERING COMPANY GMBH
+FRANKFURT, GERMANY
+:52A:DEUTDEFFXXX
+:21:TXN001
+:32B:EUR10000,00
+:57A:ABORABAB
+:59:/AE070331234567890123456
+BENEFICIARY LLC
+DUBAI
+:70:SALARY NOV 2024
+:71A:SHA""",
+    "pacs.008 - Credit Transfer": """<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08">
+  <FIToFICstmrCdtTrf>
+    <GrpHdr>
+      <MsgId>PACS008-2024-001</MsgId>
+      <CreDtTm>2024-11-18T10:30:00</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+    </GrpHdr>
+    <CdtTrfTxInf>
+      <PmtId>
+        <EndToEndId>E2E-REF-001</EndToEndId>
+      </PmtId>
+      <IntrBkSttlmAmt Ccy="USD">75000.00</IntrBkSttlmAmt>
+      <IntrBkSttlmDt>2024-11-18</IntrBkSttlmDt>
+      <ChrgBr>SHAR</ChrgBr>
+      <Dbtr>
+        <Nm>SENDER COMPANY INC</Nm>
+        <PstlAdr>
+          <Ctry>US</Ctry>
+        </PstlAdr>
+      </Dbtr>
+      <DbtrAcct>
+        <Id>
+          <Othr>
+            <Id>123456789</Id>
+          </Othr>
+        </Id>
+      </DbtrAcct>
+      <DbtrAgt>
+        <FinInstnId>
+          <BICFI>CHASUS33XXX</BICFI>
+        </FinInstnId>
+      </DbtrAgt>
+      <CdtrAgt>
+        <FinInstnId>
+          <BICFI>BABORABB</BICFI>
+        </FinInstnId>
+      </CdtrAgt>
+      <Cdtr>
+        <Nm>RECEIVER COMPANY LLC</Nm>
+        <PstlAdr>
+          <Ctry>AE</Ctry>
+        </PstlAdr>
+      </Cdtr>
+      <CdtrAcct>
+        <Id>
+          <Othr>
+            <Id>987654321</Id>
+          </Othr>
+        </Id>
+      </CdtrAcct>
+      <RmtInf>
+        <Ustrd>Payment for services</Ustrd>
+      </RmtInf>
+    </CdtTrfTxInf>
+  </FIToFICstmrCdtTrf>
+</Document>""",
+    "pain.001 - Payment Initiation": """<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.09">
+  <CstmrCdtTrfInitn>
+    <GrpHdr>
+      <MsgId>PAIN001-2024-001</MsgId>
+      <CreDtTm>2024-11-20T09:00:00</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+    </GrpHdr>
+    <PmtInf>
+      <PmtInfId>PMT-001</PmtInfId>
+      <PmtMtd>TRF</PmtMtd>
+      <ReqdExctnDt>
+        <Dt>2024-11-20</Dt>
+      </ReqdExctnDt>
+      <Dbtr>
+        <Nm>ORDERING COMPANY</Nm>
+      </Dbtr>
+      <DbtrAcct>
+        <Id>
+          <IBAN>DE89370400440532013000</IBAN>
+        </Id>
+      </DbtrAcct>
+      <DbtrAgt>
+        <FinInstnId>
+          <BICFI>DEUTDEFFXXX</BICFI>
+        </FinInstnId>
+      </DbtrAgt>
+      <CdtTrfTxInf>
+        <PmtId>
+          <EndToEndId>E2E-PMT-001</EndToEndId>
+        </PmtId>
+        <Amt>
+          <InstdAmt Ccy="EUR">25000.00</InstdAmt>
+        </Amt>
+        <CdtrAgt>
+          <FinInstnId>
+            <BICFI>ABORABAB</BICFI>
+          </FinInstnId>
+        </CdtrAgt>
+        <Cdtr>
+          <Nm>BENEFICIARY COMPANY</Nm>
+        </Cdtr>
+        <CdtrAcct>
+          <Id>
+            <IBAN>AE070331234567890123456</IBAN>
+          </Id>
+        </CdtrAcct>
+        <RmtInf>
+          <Ustrd>Invoice payment</Ustrd>
+        </RmtInf>
+      </CdtTrfTxInf>
+    </PmtInf>
+  </CstmrCdtTrfInitn>
+</Document>"""
+}
+
+
+def detect_message_type(text: str) -> Tuple[str, str, str]:
+    """
+    Detect message type and format
+    Returns: (source_type, target_type, format)
+    """
+    text = text.strip()
+    
+    # Check for ISO 20022 XML
+    if 'pacs.008' in text or 'FIToFICstmrCdtTrf' in text:
+        return ('pacs.008', 'MT103', 'xml')
+    
+    if 'pain.001' in text or 'CstmrCdtTrfInitn' in text:
+        return ('pain.001', 'MT101', 'xml')
+    
+    # Check for JSON
+    if text.startswith('{'):
+        try:
+            data = json.loads(text)
+            
+            # Check for ISO 20022 JSON
+            if 'Document' in data:
+                if 'FIToFICstmrCdtTrf' in data.get('Document', {}):
+                    return ('pacs.008', 'MT103', 'json')
+                if 'CstmrCdtTrfInitn' in data.get('Document', {}):
+                    return ('pain.001', 'MT101', 'json')
+            
+            # Check for MT JSON
+            if 'MT101' in data:
+                return ('MT101', 'pain.001', 'json')
+            if 'MT103' in data:
+                return ('MT103', 'pacs.008', 'json')
+            
+            # Check Block2
+            mt = data.get('MT103', data.get('MT101', data))
+            b2 = mt.get('Block2', {})
+            msg_type = str(b2.get('MessageType', ''))
+            if msg_type == '101':
+                return ('MT101', 'pain.001', 'json')
+            elif msg_type == '103':
+                return ('MT103', 'pacs.008', 'json')
+            
+            # Check Block4 fields
+            b4 = mt.get('Block4', {})
+            if any(k in b4 for k in ['Field28D', 'Field50H', 'Field30']):
+                return ('MT101', 'pain.001', 'json')
+            
+            return ('MT103', 'pacs.008', 'json')
+        except:
+            pass
+    
+    # Plain text MT detection
+    if ':28D:' in text or ':50H:' in text or (':30:' in text and ':32B:' in text):
+        return ('MT101', 'pain.001', 'text')
+    
+    if ':23B:' in text or ':32A:' in text or ':20:' in text:
+        return ('MT103', 'pacs.008', 'text')
+    
+    return ('MT103', 'pacs.008', 'text')
+
+
+def parse_mt_json(text: str) -> Dict[str, Any]:
+    """Parse MT message in JSON format"""
+    result = {}
+    
+    try:
+        data = json.loads(text)
+        mt = data.get('MT103', data.get('MT101', data))
+        b4 = mt.get('Block4', {})
+        
+        result['ref'] = b4.get('Field20', '')
+        
+        # Amount
+        f32a = b4.get('Field32A', {})
+        f32b = b4.get('Field32B', {})
+        
+        if isinstance(f32a, dict) and f32a:
+            result['date'] = str(f32a.get('Date', ''))
+            result['ccy'] = str(f32a.get('Currency', ''))
+            result['amt'] = str(f32a.get('Amount', '')).replace(',', '.')
+        elif isinstance(f32b, dict) and f32b:
+            result['ccy'] = str(f32b.get('Currency', ''))
+            result['amt'] = str(f32b.get('Amount', '')).replace(',', '.')
+        
+        if 'Field30' in b4 and not result.get('date'):
+            result['date'] = str(b4.get('Field30', ''))
+        
+        # Sender
+        sender = None
+        for fname in ['Field50F', 'Field50K', 'Field50H']:
+            if fname in b4:
+                sender = b4[fname]
+                break
+        
+        if sender and isinstance(sender, dict):
+            result['s_acct'] = sender.get('Account', '')
+            na = sender.get('NameAndAddress', {})
+            if isinstance(na, dict):
+                line1 = na.get('Line1', '')
+                result['s_name'] = line1.split('/', 1)[-1].strip() if '/' in line1 and line1[0].isdigit() else line1.strip()
+                
+                addr = []
+                for lk in ['Line2', 'Line3']:
+                    ln = na.get(lk, '')
+                    if ln:
+                        addr.append(ln.split('/', 1)[-1].strip() if '/' in ln and ln[0].isdigit() else ln.strip())
+                result['s_addr'] = ', '.join(addr)
+                
+                line4 = na.get('Line4', '')
+                if line4:
+                    parts = line4.split('/')
+                    if len(parts) >= 2:
+                        result['s_ctry'] = parts[1].strip()
+        
+        # Sender BIC
+        f52 = b4.get('Field52A', {})
+        if isinstance(f52, dict):
+            result['s_bic'] = f52.get('IdentifierCode', '')
+        
+        # Receiver
+        receiver = None
+        for fname in ['Field59F', 'Field59']:
+            if fname in b4:
+                receiver = b4[fname]
+                break
+        
+        if receiver and isinstance(receiver, dict):
+            result['r_acct'] = receiver.get('Account', '')
+            na = receiver.get('NameAndAddress', {})
+            if isinstance(na, dict):
+                line1 = na.get('Line1', '')
+                result['r_name'] = line1.split('/', 1)[-1].strip() if '/' in line1 and line1[0].isdigit() else line1.strip()
+                
+                line4 = na.get('Line4', '')
+                if line4:
+                    parts = line4.split('/')
+                    if len(parts) >= 2:
+                        result['r_ctry'] = parts[1].strip()
+        
+        result['remit'] = b4.get('Field70', '')
+        result['charges'] = b4.get('Field71A', '')
+        
+    except Exception as e:
+        st.error(f"JSON Error: {e}")
+    
+    return result
+
+
+def parse_mt_text(text: str) -> Dict[str, Any]:
+    """Parse MT message in plain text format"""
+    result = {}
+    
+    m = re.search(r':20:([^\n:]+)', text)
+    if m: result['ref'] = m.group(1).strip()
+    
+    m = re.search(r':32A:(\d{6})([A-Z]{3})([\d,\.]+)', text)
+    if m:
+        result['date'] = m.group(1)
+        result['ccy'] = m.group(2)
+        result['amt'] = m.group(3).replace(',', '.')
+    
+    if not result.get('amt'):
+        m = re.search(r':32B:([A-Z]{3})([\d,\.]+)', text)
+        if m:
+            result['ccy'] = m.group(1)
+            result['amt'] = m.group(2).replace(',', '.')
+    
+    if not result.get('date'):
+        m = re.search(r':30:(\d{6})', text)
+        if m: result['date'] = m.group(1)
+    
+    m = re.search(r':50[KFH]:(.*?)(?=:\d{2}[A-Z]?:|\Z)', text, re.DOTALL)
+    if m:
+        lines = [l.strip() for l in m.group(1).strip().split('\n') if l.strip()]
+        if lines:
+            if lines[0].startswith('/'):
+                result['s_acct'] = lines[0]
+                result['s_name'] = lines[1] if len(lines) > 1 else ''
+                result['s_addr'] = ', '.join(lines[2:]) if len(lines) > 2 else ''
+            else:
+                result['s_name'] = lines[0]
+                result['s_addr'] = ', '.join(lines[1:]) if len(lines) > 1 else ''
+            result['s_ctry'] = guess_country(' '.join(lines), result.get('ccy', ''))
+    
+    m = re.search(r':52A:([^\n:]+)', text)
+    if m: result['s_bic'] = m.group(1).strip()
+    
+    m = re.search(r':59[AF]?:(.*?)(?=:\d{2}[A-Z]?:|\Z)', text, re.DOTALL)
+    if m:
+        lines = [l.strip() for l in m.group(1).strip().split('\n') if l.strip()]
+        if lines:
+            if lines[0].startswith('/'):
+                result['r_acct'] = lines[0]
+                result['r_name'] = lines[1] if len(lines) > 1 else ''
+            else:
+                result['r_name'] = lines[0]
+            result['r_ctry'] = guess_country(' '.join(lines), '')
+    
+    m = re.search(r':70:(.*?)(?=:\d{2}[A-Z]?:|\Z)', text, re.DOTALL)
+    if m: result['remit'] = m.group(1).strip().replace('\n', ' ')
+    
+    m = re.search(r':71A:([A-Z]{3})', text)
+    if m: result['charges'] = m.group(1)
+    
+    return result
+
+
+def parse_mx_xml(text: str) -> Dict[str, Any]:
+    """Parse ISO 20022 XML message"""
+    result = {}
+    
+    try:
+        import xml.etree.ElementTree as ET
+        
+        # Remove namespace for easier parsing
+        text_clean = re.sub(r'\sxmlns="[^"]+"', '', text)
+        root = ET.fromstring(text_clean)
+        
+        def find_text(paths):
+            for p in paths:
+                el = root.find(f'.//{p}')
+                if el is not None:
+                    return el.text.strip() if el.text else ''
+            return ''
+        
+        def find_attr(paths, attr):
+            for p in paths:
+                el = root.find(f'.//{p}')
+                if el is not None:
+                    return el.get(attr, '')
+            return ''
+        
+        # Reference
+        result['ref'] = find_text(['MsgId', 'EndToEndId', 'PmtInfId'])
+        
+        # Amount
+        amt_text = find_text(['IntrBkSttlmAmt', 'InstdAmt'])
+        result['amt'] = amt_text
+        result['ccy'] = find_attr(['IntrBkSttlmAmt', 'InstdAmt'], 'Ccy')
+        
+        # Date
+        result['date'] = find_text(['IntrBkSttlmDt', 'ReqdExctnDt/Dt', 'CreDtTm'])[:10]
+        
+        # Sender
+        result['s_name'] = find_text(['Dbtr/Nm'])
+        result['s_acct'] = find_text(['DbtrAcct/Id/IBAN', 'DbtrAcct/Id/Othr/Id'])
+        result['s_bic'] = find_text(['DbtrAgt/FinInstnId/BICFI', 'DbtrAgt/FinInstnId/BIC'])
+        result['s_ctry'] = find_text(['Dbtr/PstlAdr/Ctry'])
+        
+        # Receiver
+        result['r_name'] = find_text(['Cdtr/Nm'])
+        result['r_acct'] = find_text(['CdtrAcct/Id/IBAN', 'CdtrAcct/Id/Othr/Id'])
+        result['r_bic'] = find_text(['CdtrAgt/FinInstnId/BICFI', 'CdtrAgt/FinInstnId/BIC'])
+        result['r_ctry'] = find_text(['Cdtr/PstlAdr/Ctry'])
+        
+        # Remittance
+        result['remit'] = find_text(['RmtInf/Ustrd'])
+        
+        # Charges
+        result['charges'] = find_text(['ChrgBr'])
+        
+    except Exception as e:
+        st.error(f"XML Error: {e}")
+    
+    return result
+
+
+def guess_country(text: str, ccy: str) -> str:
+    """Guess country from text"""
+    t = text.upper()
+    if any(x in t for x in ['USA', 'UNITED STATES', 'NEW YORK', 'NY ']): return 'US'
+    if any(x in t for x in ['UK', 'LONDON', 'ENGLAND']): return 'GB'
+    if any(x in t for x in ['GERMANY', 'FRANKFURT', 'GMBH']): return 'DE'
+    if any(x in t for x in ['FRANCE', 'PARIS']): return 'FR'
+    if any(x in t for x in ['UAE', 'DUBAI']): return 'AE'
+    if 'SINGAPORE' in t: return 'SG'
+    return {'USD': 'US', 'EUR': 'EU', 'GBP': 'GB', 'AED': 'AE'}.get(ccy, '')
+
+
+def get_flag(c: str) -> str:
+    return {'US': '🇺🇸', 'GB': '🇬🇧', 'DE': '🇩🇪', 'FR': '🇫🇷', 'AE': '🇦🇪', 'SG': '🇸🇬', 'EU': '🇪🇺'}.get(c, '🌍')
+
+
+def format_amount(amt: str, ccy: str) -> str:
+    try:
+        v = float(amt) if amt else 0
+        s = {'USD': '$', 'EUR': '€', 'GBP': '£', 'AED': 'د.إ'}.get(ccy, f'{ccy} ')
+        return f"{s}{v:,.2f}"
+    except:
+        return f"{ccy} {amt}"
+
+
+def generate_mt_from_mx(fields: Dict[str, Any], mt_type: str) -> str:
+    """Generate MT message from parsed MX fields"""
+    lines = []
+    
+    lines.append(f":20:{fields.get('ref', 'REF001')[:16]}")
+    
+    if mt_type == 'MT101':
+        lines.append(":28D:1/1")
+        date = fields.get('date', '').replace('-', '')[:6]
+        if not date:
+            date = datetime.now().strftime('%y%m%d')
+        lines.append(f":30:{date}")
+        lines.append(f":50H:/{fields.get('s_acct', '')}")
+        if fields.get('s_name'):
+            lines.append(fields['s_name'][:35])
+        if fields.get('s_bic'):
+            lines.append(f":52A:{fields['s_bic']}")
+        lines.append(":21:TXN001")
+        ccy = fields.get('ccy', 'USD')
+        amt = fields.get('amt', '0').replace('.', ',')
+        lines.append(f":32B:{ccy}{amt}")
+    else:  # MT103
+        lines.append(":23B:CRED")
+        date = fields.get('date', '').replace('-', '')[:6]
+        if not date:
+            date = datetime.now().strftime('%y%m%d')
+        ccy = fields.get('ccy', 'USD')
+        amt = fields.get('amt', '0').replace('.', ',')
+        lines.append(f":32A:{date}{ccy}{amt}")
+        lines.append(f":50K:/{fields.get('s_acct', '')}")
+        if fields.get('s_name'):
+            lines.append(fields['s_name'][:35])
+        if fields.get('s_bic'):
+            lines.append(f":52A:{fields['s_bic']}")
+    
+    lines.append(f":59:/{fields.get('r_acct', '')}")
+    if fields.get('r_name'):
+        lines.append(fields['r_name'][:35])
+    
+    if fields.get('remit'):
+        lines.append(f":70:{fields.get('remit', '')[:35]}")
+    
+    charges = fields.get('charges', 'SHA')
+    if charges not in ['SHA', 'BEN', 'OUR']:
+        charges = 'SHA'
+    lines.append(f":71A:{charges}")
+    
+    return '\n'.join(lines)
+
+
+def generate_mx_from_mt(fields: Dict[str, Any], mx_type: str) -> str:
+    """Generate MX XML from parsed MT fields"""
+    
+    now = datetime.utcnow().isoformat()
+    
+    if mx_type == 'pain.001':
+        xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.09">
+  <CstmrCdtTrfInitn>
+    <GrpHdr>
+      <MsgId>{fields.get('ref', 'MSG001')}</MsgId>
+      <CreDtTm>{now}</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <CtrlSum>{fields.get('amt', '0')}</CtrlSum>
+      <InitgPty>
+        <Nm>{fields.get('s_name', '')}</Nm>
+      </InitgPty>
+    </GrpHdr>
+    <PmtInf>
+      <PmtInfId>PMT-{fields.get('ref', '001')}</PmtInfId>
+      <PmtMtd>TRF</PmtMtd>
+      <NbOfTxs>1</NbOfTxs>
+      <ReqdExctnDt>
+        <Dt>{fields.get('date', datetime.now().strftime('%Y-%m-%d'))}</Dt>
+      </ReqdExctnDt>
+      <Dbtr>
+        <Nm>{fields.get('s_name', '')}</Nm>
+      </Dbtr>
+      <DbtrAcct>
+        <Id>
+          <Othr>
+            <Id>{fields.get('s_acct', '').replace('/', '')}</Id>
+          </Othr>
+        </Id>
+      </DbtrAcct>
+      <DbtrAgt>
+        <FinInstnId>
+          <BICFI>{fields.get('s_bic', '')}</BICFI>
+        </FinInstnId>
+      </DbtrAgt>
+      <CdtTrfTxInf>
+        <PmtId>
+          <EndToEndId>E2E-{fields.get('ref', '001')}</EndToEndId>
+        </PmtId>
+        <Amt>
+          <InstdAmt Ccy="{fields.get('ccy', 'USD')}">{fields.get('amt', '0')}</InstdAmt>
+        </Amt>
+        <CdtrAgt>
+          <FinInstnId>
+            <BICFI>{fields.get('r_bic', '')}</BICFI>
+          </FinInstnId>
+        </CdtrAgt>
+        <Cdtr>
+          <Nm>{fields.get('r_name', '')}</Nm>
+        </Cdtr>
+        <CdtrAcct>
+          <Id>
+            <Othr>
+              <Id>{fields.get('r_acct', '').replace('/', '')}</Id>
+            </Othr>
+          </Id>
+        </CdtrAcct>
+        <RmtInf>
+          <Ustrd>{fields.get('remit', '')}</Ustrd>
+        </RmtInf>
+      </CdtTrfTxInf>
+    </PmtInf>
+  </CstmrCdtTrfInitn>
+</Document>'''
+    else:  # pacs.008
+        xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08">
+  <FIToFICstmrCdtTrf>
+    <GrpHdr>
+      <MsgId>{fields.get('ref', 'MSG001')}</MsgId>
+      <CreDtTm>{now}</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <SttlmInf>
+        <SttlmMtd>INDA</SttlmMtd>
+      </SttlmInf>
+    </GrpHdr>
+    <CdtTrfTxInf>
+      <PmtId>
+        <InstrId>INSTR-{fields.get('ref', '001')}</InstrId>
+        <EndToEndId>E2E-{fields.get('ref', '001')}</EndToEndId>
+      </PmtId>
+      <IntrBkSttlmAmt Ccy="{fields.get('ccy', 'USD')}">{fields.get('amt', '0')}</IntrBkSttlmAmt>
+      <IntrBkSttlmDt>{fields.get('date', datetime.now().strftime('%Y-%m-%d'))}</IntrBkSttlmDt>
+      <ChrgBr>{fields.get('charges', 'SHAR')}</ChrgBr>
+      <Dbtr>
+        <Nm>{fields.get('s_name', '')}</Nm>
+        <PstlAdr>
+          <Ctry>{fields.get('s_ctry', '')}</Ctry>
+        </PstlAdr>
+      </Dbtr>
+      <DbtrAcct>
+        <Id>
+          <Othr>
+            <Id>{fields.get('s_acct', '').replace('/', '')}</Id>
+          </Othr>
+        </Id>
+      </DbtrAcct>
+      <DbtrAgt>
+        <FinInstnId>
+          <BICFI>{fields.get('s_bic', '')}</BICFI>
+        </FinInstnId>
+      </DbtrAgt>
+      <CdtrAgt>
+        <FinInstnId>
+          <BICFI>{fields.get('r_bic', '')}</BICFI>
+        </FinInstnId>
+      </CdtrAgt>
+      <Cdtr>
+        <Nm>{fields.get('r_name', '')}</Nm>
+        <PstlAdr>
+          <Ctry>{fields.get('r_ctry', '')}</Ctry>
+        </PstlAdr>
+      </Cdtr>
+      <CdtrAcct>
+        <Id>
+          <Othr>
+            <Id>{fields.get('r_acct', '').replace('/', '')}</Id>
+          </Othr>
+        </Id>
+      </CdtrAcct>
+      <RmtInf>
+        <Ustrd>{fields.get('remit', '')}</Ustrd>
+      </RmtInf>
+    </CdtTrfTxInf>
+  </FIToFICstmrCdtTrf>
+</Document>'''
+    
+    return xml
+
+
+def check_api():
+    try:
+        return requests.get(f"{API_URL}/health", timeout=2).status_code == 200
+    except:
+        return False
+
+
+def main():
+    st.title("🔄 ISO 20022 Migration Platform")
+    st.caption("Bidirectional: MT101 ↔ pain.001 | MT103 ↔ pacs.008")
+    
+    # Sidebar
+    with st.sidebar:
+        st.header("⚙️ Settings")
+        
+        api_ok = check_api()
+        if api_ok:
+            st.success("✅ API Connected")
+        else:
+            st.warning("⚠️ API Offline (local transform only)")
+        
+        st.divider()
+        
+        st.subheader("📋 Samples")
+        sample = st.selectbox("Select", list(SAMPLES.keys()), label_visibility="collapsed")
+        if st.button("📥 Load Sample", use_container_width=True):
+            st.session_state['input'] = SAMPLES[sample]
+            st.session_state['result'] = None
+            st.rerun()
+        
+        st.divider()
+        
+        st.markdown("**Supported Transformations:**")
+        st.markdown("- MT103 → pacs.008")
+        st.markdown("- MT101 → pain.001")
+        st.markdown("- pacs.008 → MT103")
+        st.markdown("- pain.001 → MT101")
+    
+    # Main
+    col1, col2 = st.columns(2, gap="large")
+    
+    # INPUT
+    with col1:
+        st.subheader("📥 Input Message")
+        
+        uploaded = st.file_uploader("Upload (.txt, .json, .xml)", type=['txt', 'json', 'xml'])
+        if uploaded:
+            st.session_state['input'] = uploaded.read().decode('utf-8')
+            st.success(f"✅ {uploaded.name}")
+        
+        mt_input = st.text_area(
+            "Message",
+            value=st.session_state.get('input', SAMPLES["MT103 - USD Transfer"]),
+            height=180,
+            label_visibility="collapsed"
+        )
+        st.session_state['input'] = mt_input
+        
+        # Parse and preview
+        if mt_input and mt_input.strip():
+            source_type, target_type, fmt = detect_message_type(mt_input)
+            
+            # Parse based on source type
+            if source_type in ['pacs.008', 'pain.001']:
+                fields = parse_mx_xml(mt_input)
+            elif fmt == 'json':
+                fields = parse_mt_json(mt_input)
+            else:
+                fields = parse_mt_text(mt_input)
+            
+            st.session_state['fields'] = fields
+            st.session_state['source_type'] = source_type
+            st.session_state['target_type'] = target_type
+            st.session_state['fmt'] = fmt
+            
+            # Preview
+            st.divider()
+            
+            h1, h2 = st.columns([3, 1])
+            with h1:
+                st.markdown("**Transaction Details**")
+            with h2:
+                st.code(f"{source_type} → {target_type}", language=None)
+            
+            # Amount
+            st.markdown(f"### 💰 {format_amount(fields.get('amt', '0'), fields.get('ccy', 'USD'))}")
+            
+            # Parties
+            p1, p2 = st.columns(2)
+            with p1:
+                st.markdown("**FROM (Sender)**")
+                s_ctry = fields.get('s_ctry', '')
+                st.markdown(f"{get_flag(s_ctry)} **{fields.get('s_name', 'Unknown') or 'Unknown'}**")
+                st.caption(f"Account: `{fields.get('s_acct', 'N/A') or 'N/A'}`")
+                st.caption(f"BIC: {fields.get('s_bic', 'N/A') or 'N/A'}")
+            
+            with p2:
+                st.markdown("**TO (Receiver)**")
+                r_ctry = fields.get('r_ctry', '')
+                st.markdown(f"{get_flag(r_ctry)} **{fields.get('r_name', 'Unknown') or 'Unknown'}**")
+                st.caption(f"Account: `{fields.get('r_acct', 'N/A') or 'N/A'}`")
+                if fields.get('r_bic'):
+                    st.caption(f"BIC: {fields.get('r_bic')}")
+            
+            # Details
+            st.divider()
+            d1, d2, d3 = st.columns(3)
+            with d1:
+                st.markdown("**Reference**")
+                st.caption(fields.get('ref', 'N/A') or 'N/A')
+            with d2:
+                st.markdown("**Date**")
+                st.caption(fields.get('date', 'N/A') or 'N/A')
+            with d3:
+                st.markdown("**Charges**")
+                st.caption(fields.get('charges', 'SHA') or 'SHA')
+            
+            if fields.get('remit'):
+                st.divider()
+                st.markdown("**Remittance**")
+                st.caption(fields.get('remit', '')[:80])
+            
+            st.divider()
+        
+        # Buttons
+        b1, b2 = st.columns(2)
+        with b1:
+            transform_btn = st.button("🚀 Transform", type="primary", use_container_width=True)
+        with b2:
+            if st.button("🗑️ Clear", use_container_width=True):
+                st.session_state['result'] = None
+                st.rerun()
+    
+    # OUTPUT
+    with col2:
+        target = st.session_state.get('target_type', 'pacs.008')
+        st.subheader(f"📤 Output {target}")
+        
+        if 'result' in st.session_state and st.session_state['result']:
+            result = st.session_state['result']
+            
+            if target in ['MT101', 'MT103']:
+                # Output is MT format
+                st.code(result, language='text')
+                st.download_button(
+                    f"📥 Download {target}.txt",
+                    result,
+                    f"{target}.txt",
+                    "text/plain",
+                    use_container_width=True
+                )
+            else:
+                # Output is MX XML
+                st.code(result, language='xml')
+                st.download_button(
+                    f"📥 Download {target}.xml",
+                    result,
+                    f"{target}.xml",
+                    "application/xml",
+                    use_container_width=True
+                )
+        else:
+            st.info("👈 Enter message and click Transform")
+    
+    # Process
+    if transform_btn and mt_input:
+        with st.spinner("Transforming..."):
+            source = st.session_state.get('source_type', 'MT103')
+            target = st.session_state.get('target_type', 'pacs.008')
+            fields = st.session_state.get('fields', {})
+            
+            if target in ['MT101', 'MT103']:
+                # MX to MT
+                output = generate_mt_from_mx(fields, target)
+            else:
+                # MT to MX
+                output = generate_mx_from_mt(fields, target)
+            
+            st.session_state['result'] = output
+            st.rerun()
+
+
+if __name__ == "__main__":
+    main()

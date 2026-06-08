@@ -1,0 +1,778 @@
+"""
+ISO 20022 GenAI Migration Platform - Awesome UI
+File upload + text input with transaction preview
+"""
+
+import streamlit as st
+import requests
+import json
+import re
+import time
+from datetime import datetime
+from typing import Dict, Any
+import xml.etree.ElementTree as ET
+
+# Page config
+st.set_page_config(
+    page_title="ISO 20022 Migration",
+    page_icon="🔄",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Awesome CSS
+st.markdown("""
+<style>
+    .main .block-container {
+        padding-top: 1.5rem;
+        max-width: 1400px;
+    }
+    
+    .hero-header {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+        padding: 2rem 2.5rem;
+        border-radius: 20px;
+        color: white;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 20px 60px rgba(99, 102, 241, 0.4);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .hero-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 100%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+    }
+    
+    .hero-header h1 {
+        margin: 0;
+        font-size: 2.2rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+    }
+    
+    .hero-header p {
+        margin: 0.5rem 0 0 0;
+        opacity: 0.9;
+        font-size: 1rem;
+    }
+    
+    .glass-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        padding: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+        margin-bottom: 1rem;
+    }
+    
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .upload-zone {
+        border: 2px dashed #cbd5e1;
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        background: #f8fafc;
+        transition: all 0.3s ease;
+        margin-bottom: 1rem;
+    }
+    
+    .upload-zone:hover {
+        border-color: #6366f1;
+        background: #f1f5f9;
+    }
+    
+    /* Transaction Preview */
+    .tx-preview {
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        border-radius: 16px;
+        padding: 1.5rem;
+        border: 1px solid #bae6fd;
+        margin: 1rem 0;
+    }
+    
+    .tx-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+    
+    .tx-title {
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: #0c4a6e;
+    }
+    
+    .format-pill {
+        padding: 0.25rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .pill-text { background: #dbeafe; color: #1d4ed8; }
+    .pill-json { background: #fef3c7; color: #b45309; }
+    .pill-xml { background: #d1fae5; color: #047857; }
+    
+    .amount-hero {
+        text-align: center;
+        padding: 1.25rem;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        border-radius: 12px;
+        color: white;
+        margin-bottom: 1rem;
+    }
+    
+    .amount-number {
+        font-size: 2.25rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+    }
+    
+    .amount-label {
+        font-size: 0.75rem;
+        opacity: 0.9;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+    }
+    
+    .parties-flow {
+        display: flex;
+        align-items: stretch;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    .party-card {
+        flex: 1;
+        background: white;
+        border-radius: 12px;
+        padding: 1rem;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+    
+    .party-flag {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .party-name {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: #1e293b;
+        margin-bottom: 0.25rem;
+        line-height: 1.3;
+    }
+    
+    .party-account {
+        font-size: 0.7rem;
+        color: #64748b;
+        font-family: 'Monaco', 'Consolas', monospace;
+        word-break: break-all;
+    }
+    
+    .party-country {
+        font-size: 0.7rem;
+        color: #94a3b8;
+        margin-top: 0.25rem;
+    }
+    
+    .flow-arrow {
+        display: flex;
+        align-items: center;
+        font-size: 1.5rem;
+        color: #6366f1;
+        padding: 0 0.25rem;
+    }
+    
+    .details-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+    
+    .detail-chip {
+        background: white;
+        padding: 0.6rem 0.8rem;
+        border-radius: 8px;
+        border-left: 3px solid #6366f1;
+    }
+    
+    .detail-label {
+        font-size: 0.65rem;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.15rem;
+    }
+    
+    .detail-value {
+        font-size: 0.8rem;
+        color: #1e293b;
+        font-weight: 500;
+        word-break: break-all;
+    }
+    
+    /* Agent Cards */
+    .agent-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        margin: 0.25rem;
+    }
+    
+    .agent-complete {
+        background: #d1fae5;
+        color: #065f46;
+    }
+    
+    .agent-warning {
+        background: #fed7aa;
+        color: #9a3412;
+    }
+    
+    /* Stats */
+    .stats-row {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .stat-chip {
+        flex: 1;
+        min-width: 80px;
+        background: #f8fafc;
+        padding: 0.75rem;
+        border-radius: 10px;
+        text-align: center;
+        border: 1px solid #e2e8f0;
+    }
+    
+    .stat-num {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #6366f1;
+    }
+    
+    .stat-txt {
+        font-size: 0.65rem;
+        color: #64748b;
+        text-transform: uppercase;
+    }
+    
+    /* Hide streamlit stuff */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stDeployButton {display: none;}
+</style>
+""", unsafe_allow_html=True)
+
+API_BASE_URL = "http://localhost:8000"
+
+# Sample data
+SAMPLES = {
+    "USD Transfer ($50K)": """:20:TRX2024112001
+:23B:CRED
+:32A:241118USD50000,00
+:50K:/123456789
+ACME CORPORATION
+123 BUSINESS STREET
+NEW YORK, NY 10001
+:52A:CHASUS33XXX
+:59:/987654321
+GLOBAL TRADING LTD
+456 COMMERCE AVENUE
+LONDON, EC2R 8AH
+:70:INVOICE INV-2024-1234
+:71A:SHA""",
+    "EUR Transfer (€2.5M)": """:20:TRX2024112002
+:23B:CRED
+:32A:241118EUR2500000,00
+:50K:/DE89370400440532013000
+DEUTSCHE MANUFACTURING GMBH
+INDUSTRIESTRASSE 45
+FRANKFURT
+:52A:DEUTDEFFXXX
+:59:/GB82WEST12345698765432
+BRITISH IMPORTS PLC
+MANCHESTER
+:70:CONTRACT-5678
+:71A:OUR"""
+}
+
+
+def detect_format(content: str) -> str:
+    """Detect input format"""
+    content = content.strip()
+    if content.startswith('{'):
+        try:
+            json.loads(content)
+            return "json"
+        except:
+            pass
+    if content.startswith('<'):
+        try:
+            ET.fromstring(content)
+            return "xml"
+        except:
+            pass
+    return "text"
+
+
+def parse_text(content: str) -> Dict[str, Any]:
+    """Parse plain MT103"""
+    f = {}
+    
+    m = re.search(r':20:([^\n:]+)', content)
+    if m: f['ref'] = m.group(1).strip()
+    
+    m = re.search(r':32A:(\d{6})([A-Z]{3})([\d,\.]+)', content)
+    if m:
+        f['date'] = m.group(1)
+        f['ccy'] = m.group(2)
+        f['amt'] = m.group(3).replace(',', '.')
+    
+    m = re.search(r':50[KAF]:(.*?)(?=:\d{2}[A-Z]?:|\Z)', content, re.DOTALL)
+    if m:
+        lines = [l.strip() for l in m.group(1).strip().split('\n') if l.strip()]
+        f['s_acct'] = lines[0] if lines else ''
+        f['s_name'] = lines[1] if len(lines) > 1 else ''
+        f['s_addr'] = ', '.join(lines[2:]) if len(lines) > 2 else ''
+        f['s_ctry'] = guess_country(' '.join(lines), f.get('ccy', ''))
+    
+    m = re.search(r':52A:([^\n:]+)', content)
+    if m: f['s_bic'] = m.group(1).strip()
+    
+    m = re.search(r':59[AF]?:(.*?)(?=:\d{2}[A-Z]?:|\Z)', content, re.DOTALL)
+    if m:
+        lines = [l.strip() for l in m.group(1).strip().split('\n') if l.strip()]
+        f['r_acct'] = lines[0] if lines else ''
+        f['r_name'] = lines[1] if len(lines) > 1 else ''
+        f['r_addr'] = ', '.join(lines[2:]) if len(lines) > 2 else ''
+        f['r_ctry'] = guess_country(' '.join(lines), '')
+    
+    m = re.search(r':70:(.*?)(?=:\d{2}[A-Z]?:|\Z)', content, re.DOTALL)
+    if m: f['remit'] = m.group(1).strip().replace('\n', ' ')
+    
+    m = re.search(r':71A:([A-Z]{3})', content)
+    if m: f['charges'] = m.group(1)
+    
+    return f
+
+
+def parse_json_mt(content: str) -> Dict[str, Any]:
+    """Parse JSON MT103"""
+    f = {}
+    try:
+        data = json.loads(content)
+        mt = data.get('MT103', data)
+        b4 = mt.get('Block4', {})
+        
+        f['ref'] = b4.get('Field20', '')
+        
+        f32 = b4.get('Field32A', {})
+        if isinstance(f32, dict):
+            f['date'] = f32.get('Date', '')
+            f['ccy'] = f32.get('Currency', '')
+            f['amt'] = f32.get('Amount', '').replace(',', '.')
+        
+        f50 = b4.get('Field50F', b4.get('Field50K', {}))
+        if isinstance(f50, dict):
+            f['s_acct'] = f50.get('Account', '')
+            na = f50.get('NameAndAddress', {})
+            if isinstance(na, dict):
+                l1 = na.get('Line1', '')
+                f['s_name'] = l1.split('/')[-1].strip() if '/' in l1 else l1
+                l4 = na.get('Line4', '')
+                if l4:
+                    parts = l4.split('/')
+                    f['s_ctry'] = parts[1] if len(parts) > 1 else ''
+                addr = []
+                for k in ['Line2', 'Line3']:
+                    ln = na.get(k, '')
+                    if ln: addr.append(ln.split('/')[-1].strip())
+                f['s_addr'] = ', '.join(addr)
+        
+        f52 = b4.get('Field52A', {})
+        if isinstance(f52, dict):
+            f['s_bic'] = f52.get('IdentifierCode', '')
+        
+        f59 = b4.get('Field59F', b4.get('Field59', {}))
+        if isinstance(f59, dict):
+            f['r_acct'] = f59.get('Account', '')
+            na = f59.get('NameAndAddress', {})
+            if isinstance(na, dict):
+                l1 = na.get('Line1', '')
+                f['r_name'] = l1.split('/')[-1].strip() if '/' in l1 else l1
+                l4 = na.get('Line4', '')
+                if l4:
+                    parts = l4.split('/')
+                    f['r_ctry'] = parts[1] if len(parts) > 1 else ''
+                addr = []
+                for k in ['Line2', 'Line3']:
+                    ln = na.get(k, '')
+                    if ln: addr.append(ln.split('/')[-1].strip())
+                f['r_addr'] = ', '.join(addr)
+        
+        f['remit'] = b4.get('Field70', '')
+        f['charges'] = b4.get('Field71A', '')
+        
+    except Exception as e:
+        st.error(f"JSON parse error: {e}")
+    return f
+
+
+def guess_country(text: str, ccy: str) -> str:
+    """Guess country from text"""
+    t = text.upper()
+    patterns = {
+        'US': ['USA', 'UNITED STATES', 'NEW YORK', 'NY ', 'CALIFORNIA'],
+        'GB': ['UK', 'LONDON', 'MANCHESTER', 'ENGLAND'],
+        'DE': ['GERMANY', 'FRANKFURT', 'BERLIN', 'MUNICH'],
+        'FR': ['FRANCE', 'PARIS'],
+        'AE': ['UAE', 'DUBAI'],
+        'SG': ['SINGAPORE']
+    }
+    for c, ps in patterns.items():
+        if any(p in t for p in ps):
+            return c
+    return {'USD': 'US', 'EUR': 'EU', 'GBP': 'GB'}.get(ccy, '')
+
+
+def get_flag(c: str) -> str:
+    """Get flag emoji"""
+    flags = {'US': '🇺🇸', 'GB': '🇬🇧', 'DE': '🇩🇪', 'FR': '🇫🇷', 'AE': '🇦🇪', 'SG': '🇸🇬', 'EU': '🇪🇺'}
+    return flags.get(c, '🌍')
+
+
+def fmt_amt(amt: str, ccy: str) -> str:
+    """Format amount"""
+    try:
+        a = float(amt)
+        sym = {'USD': '$', 'EUR': '€', 'GBP': '£'}.get(ccy, ccy + ' ')
+        return f"{sym}{a:,.2f}"
+    except:
+        return f"{ccy} {amt}"
+
+
+def to_plain_mt(f: Dict[str, Any]) -> str:
+    """Convert to plain MT for API"""
+    lines = [
+        f":20:{f.get('ref', 'REF001')}",
+        ":23B:CRED",
+        f":32A:{f.get('date', '241118')}{f.get('ccy', 'USD')}{f.get('amt', '0').replace('.', ',')}",
+        f":50K:{f.get('s_acct', '')}",
+        f.get('s_name', 'SENDER'),
+    ]
+    if f.get('s_addr'): lines.append(f.get('s_addr'))
+    if f.get('s_bic'): lines.append(f":52A:{f.get('s_bic')}")
+    lines.extend([
+        f":59:{f.get('r_acct', '')}",
+        f.get('r_name', 'RECEIVER'),
+    ])
+    if f.get('r_addr'): lines.append(f.get('r_addr'))
+    if f.get('remit'): lines.append(f":70:{f.get('remit')}")
+    lines.append(f":71A:{f.get('charges', 'SHA')}")
+    return '\n'.join(lines)
+
+
+def check_api():
+    """Check API health"""
+    try:
+        return requests.get(f"{API_BASE_URL}/health", timeout=2).status_code == 200
+    except:
+        return False
+
+
+def transform(mt: str, approach: str):
+    """Call transform API"""
+    try:
+        r = requests.post(f"{API_BASE_URL}/transform", json={"mt_message": mt, "approach": approach}, timeout=60)
+        return r.json() if r.status_code == 200 else {"error": f"API {r.status_code}: {r.text}"}
+    except requests.exceptions.ConnectionError:
+        return {"error": "Cannot connect to API. Start the backend first."}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def main():
+    # Hero Header
+    st.markdown("""
+    <div class="hero-header">
+        <h1>🔄 ISO 20022 Migration Platform</h1>
+        <p>Transform SWIFT MT messages to ISO 20022 MX with AI-powered mapping</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Sidebar
+    with st.sidebar:
+        st.markdown("### ⚙️ Settings")
+        
+        api_ok = check_api()
+        if api_ok:
+            st.success("✅ API Online")
+        else:
+            st.error("❌ API Offline")
+            st.code("uvicorn main:app --reload")
+        
+        st.divider()
+        
+        approach = st.radio(
+            "**Approach**",
+            ["hybrid", "rules", "llm"],
+            format_func=lambda x: {"hybrid": "⚡ Hybrid", "rules": "🔧 Rules", "llm": "🧠 LLM"}[x]
+        )
+        
+        st.divider()
+        
+        st.markdown("**📋 Samples**")
+        sample = st.selectbox("Load sample", list(SAMPLES.keys()), label_visibility="collapsed")
+        if st.button("📥 Load", use_container_width=True):
+            st.session_state['input'] = SAMPLES[sample]
+            st.session_state['result'] = None
+            st.rerun()
+    
+    # Main Layout
+    col_in, col_out = st.columns([1, 1], gap="medium")
+    
+    # INPUT COLUMN
+    with col_in:
+        st.markdown('<div class="section-title">📥 Input MT Message</div>', unsafe_allow_html=True)
+        
+        # File Upload
+        uploaded = st.file_uploader(
+            "Upload MT file",
+            type=['txt', 'json', 'xml'],
+            help="Upload .txt, .json, or .xml MT message file"
+        )
+        
+        if uploaded:
+            content = uploaded.read().decode('utf-8')
+            st.session_state['input'] = content
+            st.success(f"✅ Loaded: {uploaded.name}")
+        
+        # Text Input
+        mt_input = st.text_area(
+            "Paste or edit MT message",
+            value=st.session_state.get('input', SAMPLES["USD Transfer ($50K)"]),
+            height=250,
+            label_visibility="collapsed"
+        )
+        
+        # Update session state
+        if mt_input != st.session_state.get('input'):
+            st.session_state['input'] = mt_input
+        
+        # Parse and show preview
+        if mt_input and mt_input.strip():
+            fmt = detect_format(mt_input)
+            
+            if fmt == 'json':
+                fields = parse_json_mt(mt_input)
+            else:
+                fields = parse_text(mt_input)
+            
+            st.session_state['fields'] = fields
+            st.session_state['fmt'] = fmt
+            
+            # Transaction Preview
+            pill_class = {'text': 'pill-text', 'json': 'pill-json', 'xml': 'pill-xml'}.get(fmt, 'pill-text')
+            pill_label = fmt.upper()
+            
+            st.markdown(f"""
+            <div class="tx-preview">
+                <div class="tx-header">
+                    <span class="tx-title">📋 Transaction Preview</span>
+                    <span class="format-pill {pill_class}">{pill_label}</span>
+                </div>
+                
+                <div class="amount-hero">
+                    <div class="amount-label">Transfer Amount</div>
+                    <div class="amount-number">{fmt_amt(fields.get('amt', '0'), fields.get('ccy', 'USD'))}</div>
+                </div>
+                
+                <div class="parties-flow">
+                    <div class="party-card">
+                        <div class="party-flag">{get_flag(fields.get('s_ctry', ''))}</div>
+                        <div class="party-name">{fields.get('s_name', 'Sender')[:30]}</div>
+                        <div class="party-account">{fields.get('s_acct', '')[:25]}</div>
+                        <div class="party-country">{fields.get('s_ctry', 'Unknown')}</div>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="party-card">
+                        <div class="party-flag">{get_flag(fields.get('r_ctry', ''))}</div>
+                        <div class="party-name">{fields.get('r_name', 'Receiver')[:30]}</div>
+                        <div class="party-account">{fields.get('r_acct', '')[:25]}</div>
+                        <div class="party-country">{fields.get('r_ctry', 'Unknown')}</div>
+                    </div>
+                </div>
+                
+                <div class="details-grid">
+                    <div class="detail-chip">
+                        <div class="detail-label">Reference</div>
+                        <div class="detail-value">{fields.get('ref', 'N/A')}</div>
+                    </div>
+                    <div class="detail-chip">
+                        <div class="detail-label">Value Date</div>
+                        <div class="detail-value">{fields.get('date', 'N/A')}</div>
+                    </div>
+                    <div class="detail-chip">
+                        <div class="detail-label">Sender BIC</div>
+                        <div class="detail-value">{fields.get('s_bic', 'N/A')}</div>
+                    </div>
+                    <div class="detail-chip">
+                        <div class="detail-label">Charges</div>
+                        <div class="detail-value">{fields.get('charges', 'SHA')}</div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Transform Button
+        c1, c2 = st.columns(2)
+        with c1:
+            transform_btn = st.button("🚀 Transform", type="primary", use_container_width=True, disabled=not api_ok)
+        with c2:
+            if st.button("🗑️ Clear", use_container_width=True):
+                st.session_state['result'] = None
+                st.rerun()
+    
+    # OUTPUT COLUMN
+    with col_out:
+        st.markdown('<div class="section-title">📤 Output pacs.008 (ISO 20022)</div>', unsafe_allow_html=True)
+        
+        if 'result' in st.session_state and st.session_state['result']:
+            res = st.session_state['result']
+            
+            if 'error' in res:
+                st.error(f"❌ {res['error']}")
+            else:
+                # Output tabs
+                t1, t2 = st.tabs(["📄 XML", "📊 JSON"])
+                
+                with t1:
+                    xml_out = res.get('mx_xml', '')
+                    st.code(xml_out, language='xml')
+                    st.download_button(
+                        "📥 Download XML",
+                        xml_out,
+                        f"pacs008_{res.get('message_id', 'output')}.xml",
+                        "application/xml",
+                        use_container_width=True
+                    )
+                
+                with t2:
+                    st.json(res.get('mx_structure', {}))
+                    st.download_button(
+                        "📥 Download JSON",
+                        json.dumps(res.get('mx_structure', {}), indent=2),
+                        f"pacs008_{res.get('message_id', 'output')}.json",
+                        "application/json",
+                        use_container_width=True
+                    )
+        else:
+            st.info("👈 Enter MT message and click **Transform** to generate ISO 20022 output")
+    
+    # Process transform
+    if transform_btn and mt_input:
+        with st.spinner("Transforming..."):
+            # Progress
+            prog = st.progress(0)
+            
+            # Convert to plain MT if needed
+            fmt = st.session_state.get('fmt', 'text')
+            if fmt == 'json':
+                mt_for_api = to_plain_mt(st.session_state.get('fields', {}))
+            else:
+                mt_for_api = mt_input
+            
+            for i in range(5):
+                prog.progress((i + 1) * 20)
+                time.sleep(0.1)
+            
+            result = transform(mt_for_api, approach)
+            st.session_state['result'] = result
+            
+            time.sleep(0.2)
+            st.rerun()
+    
+    # Results section
+    if 'result' in st.session_state and st.session_state['result'] and 'error' not in st.session_state['result']:
+        res = st.session_state['result']
+        
+        st.divider()
+        
+        # Agent Results
+        st.markdown("### 🤖 Agent Pipeline")
+        
+        agents = res.get('agent_results', {})
+        pills_html = ""
+        for key, name in [('parser', 'Parser'), ('mapping', 'Mapping'), ('enrichment', 'Enrichment'), ('validation', 'Validation')]:
+            agent = agents.get(key, {})
+            status = agent.get('status', 'complete')
+            conf = agent.get('confidence')
+            cls = 'agent-complete' if status == 'complete' else 'agent-warning'
+            conf_txt = f" ({conf*100:.0f}%)" if conf else ""
+            pills_html += f'<span class="agent-pill {cls}">✓ {name}{conf_txt}</span>'
+        
+        st.markdown(f'<div style="margin: 1rem 0;">{pills_html}</div>', unsafe_allow_html=True)
+        
+        # Stats
+        st.markdown("### 📊 Statistics")
+        stats = res.get('statistics', {})
+        
+        st.markdown(f"""
+        <div class="stats-row">
+            <div class="stat-chip">
+                <div class="stat-num">{stats.get('fields_parsed', 0)}</div>
+                <div class="stat-txt">Parsed</div>
+            </div>
+            <div class="stat-chip">
+                <div class="stat-num">{stats.get('fields_mapped', 0)}</div>
+                <div class="stat-txt">Mapped</div>
+            </div>
+            <div class="stat-chip">
+                <div class="stat-num">{stats.get('fields_enriched', 0)}</div>
+                <div class="stat-txt">Enriched</div>
+            </div>
+            <div class="stat-chip">
+                <div class="stat-num">{stats.get('overall_confidence', 0)*100:.0f}%</div>
+                <div class="stat-txt">Confidence</div>
+            </div>
+            <div class="stat-chip">
+                <div class="stat-num">{stats.get('validation_score', 0):.0f}%</div>
+                <div class="stat-txt">Valid</div>
+            </div>
+            <div class="stat-chip">
+                <div class="stat-num">{stats.get('total_duration_ms', 0)}</div>
+                <div class="stat-txt">ms</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+if __name__ == "__main__":
+    main()

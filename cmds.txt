@@ -1,0 +1,11 @@
+cd "C:\Users\SC121360\Documents\zensar\proj_learn\ISG\iso-mapping-tool\venv"
+Scripts\activate
+
+cd "C:\Users\SC121360\Documents\zensar\proj_learn\ISG\iso-mapping-tool\app\v4"
+uvicorn main:app --reload --port 8000
+
+cd "C:\Users\SC121360\Documents\zensar\proj_learn\ISG\iso-mapping-tool\venv"
+Scripts\activate
+
+cd "C:\Users\SC121360\Documents\zensar\proj_learn\ISG\iso-mapping-tool\app\v4"
+streamlit run streamlit_app.py --server.port 8501
